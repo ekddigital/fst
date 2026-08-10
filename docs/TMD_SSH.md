@@ -24,6 +24,16 @@ These are **different servers** with different MySQL exposure. FOM’s IP-based 
 
 **Password encoding:** URL-encode special characters in `DATABASE_URL` (e.g. `#` → `%23`, `!` → `%21`). A literal `#` in the password breaks URL parsing (everything after `#` is treated as a fragment).
 
+## Names on TMD (do not confuse)
+
+|cPanel / SSH artifact|What it is|Example / where to find|
+|----------------------|----------|-------------------------|
+|**`tmdconnect`**|SSH **key pair** name (public + private)|cPanel → SSH Access → Manage SSH Keys; local file `~/.ssh/tmdconnect`|
+|**`faststar`**|SSH **shell login** user|TMD **SSH Access**; `User` in `~/.ssh/config` for `Host tmd`|
+|**MySQL user**|Database user for Prisma / `DATABASE_URL`|**cPanel → MySQL Databases** — usually `cpaneluser_dbname` (e.g. `faststar_fst`), **not** `tmdconnect`|
+
+The string `tmdconnect` must **never** appear as the MySQL username in `DATABASE_URL` unless cPanel explicitly created a DB user with that exact name (unlikely).
+
 ## Server
 
 | Setting | Value |
