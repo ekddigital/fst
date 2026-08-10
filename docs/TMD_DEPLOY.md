@@ -701,6 +701,33 @@ Database unreachable at build time. On server, confirm `.env` uses `@127.0.0.1:5
 
 `.env` is gitignored and should persist across pulls. Keep a backup in a password manager.
 
+
+### SSH drops / LVE fork limit (CloudLinux)
+
+If SSH closes immediately (`Connection closed by remote host`) or Terminal shows **LVE** / **fork** / **resource limit** errors, the account hit shared-host process limits — often from overlapping `npm install`, `next build`, and cPanel **Deploy HEAD Commit** tasks.
+
+1. Wait **15–30 minutes** without starting new builds (let existing jobs finish or time out).
+2. Prefer **cPanel → Terminal** (same shell limits, but survives brief SSH client drops better than remote SSH from your Mac).
+3. Run **one** deploy at a time — do not parallelize Git deploy + manual `npm run build`.
+4. Use the repo script (includes devDependencies via `NPM_CONFIG_PRODUCTION=false`, seed fallback, and untracked `server.js` cleanup):
+
+```bash
+cd ~/coding/fst
+git pull origin main   # get latest scripts/tmd-deploy.sh if needed
+bash scripts/tmd-deploy.sh
+```
+
+For a long build that must survive disconnect:
+
+```bash
+cd ~/coding/fst && nohup bash scripts/tmd-deploy.sh > ~/tmd-deploy.log 2>&1 &
+tail -f ~/tmd-deploy.log
+```
+
+After `BUILD_OK`, cPanel → **Setup Node.js App** → **Restart**.
+
+`server.js` is **tracked on `main`** (cPanel startup file). Only remove a **local untracked** copy before pull — see [`git pull` blocked by untracked `server.js`](#git-pull-blocked-by-untracked-serverjs).
+
 ### `git pull` blocked by untracked `server.js`
 
 If **Update from Remote** or `git pull origin main` fails because an untracked `server.js` would be overwritten:
