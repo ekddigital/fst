@@ -18,6 +18,5 @@ prisma/*.db
 # OS
 .DS_Store
 
-# Scraped site mirror (large local-only content)
-site-data/*
-!site-data/README.md
+# Scraped site mirror — local dev reference only (never commit)
+site-data/

@@ -1,6 +1,6 @@
-# Site Data (local only)
+# Site Data (local dev reference only)
 
-This folder holds scraped content and media from [faststarttalking.com](https://faststarttalking.com). It is **not committed to git** (except this README).
+The `site-data/` folder holds scraped content and media from [faststarttalking.com](https://faststarttalking.com). It is **local development reference only** — used to inform design and content for the new Next.js site. **Never commit `site-data/` to git.**
 
 ## Populate locally
 
@@ -19,7 +19,6 @@ Or copy an existing `site-data/` tree from another machine.
 
 ```
 site-data/
-├── README.md           ← this file (committed)
 ├── pages/<slug>/       ← markdown + metadata from scrape
 ├── assets/
 │   ├── images/
@@ -37,3 +36,5 @@ The Next.js app reads `site-data/pages/` via `src/lib/content.ts`. Static assets
 - `public/other` → `site-data/assets/other`
 
 After scraping, run `npm run dev` or `npm run build` to verify the site.
+
+Fresh clones do not include scraped content. Run `python scrape.py` locally before building.
