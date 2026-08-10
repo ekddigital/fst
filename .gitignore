@@ -20,3 +20,6 @@ prisma/*.db
 
 # Scraped site mirror — local dev reference only (never commit)
 site-data/
+
+# SSH keys and local credentials (never commit)
+secrets/

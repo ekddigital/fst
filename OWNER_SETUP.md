@@ -34,6 +34,23 @@ ssh outline-vpn
 
 ---
 
+## TMD Hosting SSH (production site)
+
+Production WordPress/site host for faststarttalking.com. Full steps: [docs/TMD_SSH.md](docs/TMD_SSH.md).
+
+- [ ] **Authorize SSH public key in TMD panel** — import `tmdconnect.pub`, authorize for SSH user
+- [ ] **Test login** — `ssh tmd` (alias in `~/.ssh/config`)
+
+Quick reference:
+
+```bash
+ssh tmd
+ssh -L 3307:localhost:3306 tmd    # MySQL tunnel
+ssh -L 5433:localhost:5432 tmd    # PostgreSQL tunnel
+```
+
+---
+
 ## Database (MySQL)
 
 FST uses **MySQL** via Prisma. Connection string format:
