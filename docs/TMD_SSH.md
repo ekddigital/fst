@@ -1,6 +1,18 @@
 # TMD Hosting SSH — Fast Start Talking (FST)
 
-SSH and PostgreSQL access for **FST** on TMD shared hosting (`faststar@s3838`, `195.250.26.111`). Keys live in `fst/secrets/` (gitignored) and `~/.ssh/tmdconnect`.
+SSH, SFTP, and PostgreSQL access for **FST** on TMD shared hosting (`faststar@s3838`, `195.250.26.111`). Keys live in `fst/secrets/` (gitignored) and `~/.ssh/tmdconnect`.
+
+## Access the server from your Mac (SSH / SFTP)
+
+This is **full server access** — shell, files, deploy — **not** the same as **Remote Database Access** in cPanel (PostgreSQL whitelist for local Prisma only; see [Remote PostgreSQL (Mac dev only)](#remote-postgresql-mac-dev-only)).
+
+| Method | How |
+|--------|-----|
+| **SSH shell** | Load key: `ssh-add --apple-use-keychain ~/.ssh/tmdconnect` → connect: `ssh tmd` |
+| **SFTP** | Same key; host `195.250.26.111`, user `faststar`, port `22` (FileZilla, Cyberduck, etc.) |
+| **VS Code Remote SSH** | Optional — same `tmd` host alias in `~/.ssh/config` |
+
+Do **not** confuse server SSH/SFTP with cPanel **Remote PostgreSQL** / **Remote Database Access** — the latter only opens PostgreSQL port access from a whitelisted client IP for local dev.
 
 ## Safety on shared hosting (read first)
 
@@ -19,14 +31,16 @@ Never commit `.env`, `secrets/`, or private keys.
 
 | Test | Result |
 |------|--------|
-| Mac public IP (`curl ifconfig.me`) | **`31.97.41.230`** — add this in cPanel **Remote PostgreSQL** if you want direct `:5432` from your Mac |
-| cPanel Remote DB hosts already listed | `195.250.26.108`, `195.250.26.83` (not your Mac) |
-| `nc` → `195.250.26.111:5432` | **No response / unreachable** (PG not exposed to your IP) |
+| Mac public IP (`curl ifconfig.me` on **your Mac**) | Add **this** IP in cPanel **Remote PostgreSQL** — e.g. `31.97.41.230` (yours will differ) |
+| cPanel Remote DB hosts already listed | `195.250.26.108`, `195.250.26.83` — **server IPs, not your Mac** — do not add these for local dev |
+| `nc` → `195.250.26.111:5432` | **No response / unreachable** until your Mac IP is whitelisted (Remote PG) or you use an SSH tunnel |
 | `ssh tmd` (BatchMode) | **`Permission denied (publickey)`** — fix key authorize + agent (below) |
 | SSH tunnel → `127.0.0.1:5433` | **Not up** until SSH works |
-| `npm run db:push` (direct `.env` URL) | **P1001** — can't reach `195.250.26.111:5432` |
+| `npm run db:push` (direct `.env` URL) | **P1001** — can't reach `195.250.26.111:5432` without Remote PG or tunnel |
 | `npx tsc --noEmit` | **Pass** |
-| `npm run build` | **Fails at page data** — build hits DB at `195.250.26.111:5432` while unreachable |
+| `npm run build` | **Fails at page data** — build hits DB while unreachable |
+
+**On the server** (cPanel Terminal, SSH, Node env vars, server `.env`): always `127.0.0.1:5432` — see [TMD_DEPLOY.md](./TMD_DEPLOY.md).
 
 ## Recommended path for local Prisma dev
 
@@ -56,10 +70,18 @@ No cPanel Remote PostgreSQL entry required. Traffic goes over SSH to localhost P
    npx tsc --noEmit && npm run build
    ```
 
-Keep production-style `.env` as `@195.250.26.111:5432` when remote access is enabled, or set server-side env on deploy.
+Keep a separate **Mac dev** `.env.local` with `@127.0.0.1:5433` (tunnel) or `@195.250.26.111:5432` (Remote PG). **Never** use `195.250.26.111` in server-side `.env` or cPanel Node env vars — use `127.0.0.1:5432` on the server.
 
-**Option B — Remote PostgreSQL (direct IP, like FOM pattern)**  
-Add **`31.97.41.230`** in cPanel → **Remote PostgreSQL** / **Manage Access Hosts**, then verify:
+**Option B — Remote PostgreSQL (direct IP, Mac dev only)**  
+Add your **Mac public IP** in cPanel → **Remote PostgreSQL** / **Manage Access Hosts**:
+
+```bash
+curl ifconfig.me   # run on your Mac — whitelist this IP, NOT 195.250.26.111/.108/.83
+```
+
+**Note:** On some cPanel hosts, **Remote Database Access** applies to MySQL only; PostgreSQL may not appear in that UI. If Remote PG is unavailable, use Option A (SSH tunnel). When running Prisma **on the server**, always use `127.0.0.1:5432` regardless.
+
+After whitelisting your Mac IP, verify:
 
 ```bash
 nc -G 3 -zv 195.250.26.111 5432
@@ -75,7 +97,16 @@ DATABASE_URL="postgresql://faststar_tmdconnect:DB_PASSWORD@195.250.26.111:5432/f
 URL-encode password special characters (`#` → `%23`, etc.).
 
 **Option C — Server-side only (production deploy)**  
-SSH in, use an isolated app directory (not `public_html` unless intended), run `npm run db:push` there with server-local `DATABASE_URL` (often `127.0.0.1:5432` on the host). Full cPanel Git + Node.js steps: **[TMD_DEPLOY.md](./TMD_DEPLOY.md)**.
+SSH in, use an isolated app directory (not `public_html` unless intended), run `npm run db:push` there with server-local `DATABASE_URL` at **`127.0.0.1:5432`** on the host. Full cPanel Git + Node.js steps: **[TMD_DEPLOY.md](./TMD_DEPLOY.md)**.
+
+## Remote PostgreSQL (Mac dev only)
+
+| Purpose | Whitelist IP | Connection host in `DATABASE_URL` |
+|---------|--------------|-----------------------------------|
+| Local Prisma from Mac | Your Mac (`curl ifconfig.me`) | `195.250.26.111:5432` |
+| App / Terminal **on server** | *(none needed)* | `127.0.0.1:5432` |
+
+**Not** the same as SSH/SFTP server access — see [Access the server from your Mac](#access-the-server-from-your-mac-ssh--sftp).
 
 ## FST (TMD) vs FOM (VPS)
 
@@ -161,9 +192,15 @@ Use `@127.0.0.1:5433` only while tunnel is running (dev).
 
 ### Can't reach `195.250.26.111:5432`
 
-1. Whitelist **`31.97.41.230`** in Remote PostgreSQL, **or** use `ssh -N tmd-psql` + `@127.0.0.1:5433`.
-2. Confirm user/db names and URL-encoded password.
+1. Whitelist **your Mac IP** (`curl ifconfig.me`) in Remote PostgreSQL — **not** server IPs `.111`, `.108`, or `.83`.
+2. Or use `ssh -N tmd-psql` + `@127.0.0.1:5433` in `.env.local` (no Remote PG needed).
+3. Confirm user/db names and URL-encoded password.
+4. If Remote PG UI is MySQL-only on your plan, use the SSH tunnel (Option A).
 
 ### `npm run build` fails with P1001
 
 Next.js collects page data against the DB. Fix connectivity (tunnel or remote PG) before build, or adjust app to skip DB at build time (separate change).
+
+## Security — rotate exposed credentials
+
+If database passwords, `ADMIN_PASSWORD`, or SSH-related secrets appeared in screenshots or shared logs, rotate them in cPanel (**PostgreSQL Databases**, server `.env`, cPanel Node env vars) and choose a new admin password. Update [TMD_DEPLOY.md](./TMD_DEPLOY.md) checklist env vars after rotation. Do not paste real passwords into docs or tickets.

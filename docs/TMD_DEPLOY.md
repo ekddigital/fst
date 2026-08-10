@@ -345,7 +345,7 @@ Optional: add `?sslmode=disable` to `DATABASE_URL` if Prisma connection errors m
 
 Equivalent using the template file: `cp .env.example .env` then `nano .env` — same three variables.
 
-In cPanel → **Setup Node.js App** → edit FST app → add the same env vars (`NODE_ENV`, `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL`, `ADMIN_PASSWORD`) → **Start** / **Restart**.
+In cPanel → **Setup Node.js App** → edit FST app → add the same env vars with **Name** / **Value** only (see [Phase 3 env var format](#phase-3--setup-nodejs-app-cpanel)) → **Start** / **Restart**.
 
 | Step | If it fails |
 |------|-------------|
@@ -434,12 +434,20 @@ If your plan includes **Setup Node.js App** (or **Application Manager**):
 
    The repo includes a custom Next.js server at `server.js` for cPanel/Passenger. `package.json` sets `"start": "node server.js"`.
 
-3. **Environment variables** — add the same values as `.env` (belt-and-suspenders):
+3. **Environment variables** — add the same values as `.env` (belt-and-suspenders).
 
-   - `NODE_ENV=production`
-   - `DATABASE_URL`
-   - `NEXT_PUBLIC_SITE_URL`
-   - `ADMIN_PASSWORD` (and/or `ADMIN_API_KEY`)
+   In cPanel **Setup Node.js App → Environment Variables**, each row has a **Name** and a **Value**. The **Value** must be the raw secret or URL only — **not** a shell assignment and **not** quoted.
+
+   | Name | Value (correct) | Wrong (do not use) |
+   |------|-----------------|-------------------|
+   | `NODE_ENV` | `production` | `NODE_ENV=production` |
+   | `DATABASE_URL` | `postgresql://faststar_tmdconnect:YOUR_PASSWORD@127.0.0.1:5432/faststar_fst?sslmode=disable` | `DATABASE_URL="postgresql://..."` |
+   | `NEXT_PUBLIC_SITE_URL` | `https://faststarttalking.com` | `NEXT_PUBLIC_SITE_URL="https://..."` |
+   | `ADMIN_PASSWORD` | `your-strong-admin-password` | `ADMIN_PASSWORD="..."` |
+
+   **On the server, always use `127.0.0.1:5432` in `DATABASE_URL`** — not `195.250.26.111`. PostgreSQL runs locally on the shared host; the public IP is only for connecting **from your Mac** when Remote PostgreSQL is enabled (see [TMD_SSH.md](./TMD_SSH.md)).
+
+   URL-encode special characters in the DB password (e.g. `#` → `%23`).
 
 4. **Create** → copy the **`source .../activate`** command from the app page for Terminal use
 5. After `.env` exists: **Run NPM Install** in the UI (optional) or run `npm install` in an activated Terminal session
@@ -538,10 +546,14 @@ For static-site deploys, cPanel docs use `cp` to copy files into `public_html`. 
 |------|-------|
 | Database | `faststar_fst` |
 | User | `faststar_tmdconnect` |
-| On server | `127.0.0.1:5432` |
-| From Mac (if Remote PG enabled) | `195.250.26.111:5432` |
+| On server (`.env`, cPanel Node env vars, Terminal) | `127.0.0.1:5432` |
+| From Mac (local Prisma dev only, if Remote PG enabled) | `195.250.26.111:5432` |
 
-See [TMD_SSH.md](./TMD_SSH.md) for local dev connectivity (SSH tunnel or Remote PostgreSQL).
+**Do not** put `195.250.26.111` in server-side `.env` or cPanel Node env vars — use `127.0.0.1`.
+
+**Remote Database Access** (cPanel → **Remote PostgreSQL** / **Manage Access Hosts**) is for **Mac local Prisma dev only**. Whitelist your **Mac public IP** (`curl ifconfig.me` on your Mac), **not** server IPs like `195.250.26.111`, `.108`, or `.83`. On some hosts the “Remote Database Access” UI is MySQL-only; PostgreSQL on the server still uses `127.0.0.1` when running commands **on** the server.
+
+See [TMD_SSH.md](./TMD_SSH.md) for SSH/SFTP server access vs Remote PostgreSQL, and local dev connectivity (SSH tunnel or Remote PostgreSQL).
 
 ---
 
@@ -592,6 +604,27 @@ Database unreachable at build time. On server, confirm `.env` uses `@127.0.0.1:5
 
 `.env` is gitignored and should persist across pulls. Keep a backup in a password manager.
 
+### `git pull` blocked by untracked `server.js`
+
+If **Update from Remote** or `git pull origin main` fails because an untracked `server.js` would be overwritten:
+
+```text
+error: The following untracked working tree files would be overwritten by merge:
+        server.js
+Please move or remove them before you merge.
+```
+
+The repo includes `server.js` for cPanel/Passenger. A leftover local copy blocks the pull. Fix (pick one):
+
+```bash
+cd ~/coding/fst
+rm server.js && git pull origin main
+# or, if you want to discard local changes to a tracked copy:
+git checkout -- server.js && git pull origin main
+```
+
+Then **Deploy HEAD Commit** and restart the Node.js app.
+
 ### `could not read Username for 'https://github.com'`
 
 Private repo + HTTPS clone. Full steps: [Private repo + cPanel Git](#private-repo--cpanel-git-https-error). Retry cPanel with Clone URL `git@github.com:ekddigital/fst.git` after deploy key + `~/.ssh/config`.
@@ -618,6 +651,18 @@ See [Option A — SSH deploy key](#option-a--ssh-deploy-key-recommended) and [te
 - [ ] Node.js App env vars set in cPanel, app **Start** / **Restart**
 - [ ] Smoke test: home, programs, articles, admin login, forms
 - [ ] Push to `main` → cPanel Pull → Deploy HEAD Commit → restart Node app verified
+
+---
+
+## Security — rotate exposed credentials
+
+If `ADMIN_PASSWORD`, database passwords, or other secrets were shared in screenshots, chat, or logs, **rotate them immediately**:
+
+1. cPanel → **PostgreSQL Databases** — change the password for `faststar_tmdconnect`, then update `DATABASE_URL` in server `.env` and cPanel Node env vars (value only — no `DATABASE_URL=` prefix).
+2. Choose a new `ADMIN_PASSWORD` and update `.env` + cPanel env vars.
+3. Restart the Node.js app after changes.
+
+Never paste real passwords into docs, tickets, or commit messages.
 
 ---
 
