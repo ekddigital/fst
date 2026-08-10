@@ -16,7 +16,7 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
     <div className="flex min-h-screen">
       <AdminNav />
       <main className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-6xl p-6 md:p-8">{children}</div>
+        <div className="mx-auto max-w-7xl p-6 md:p-8">{children}</div>
       </main>
     </div>
   );

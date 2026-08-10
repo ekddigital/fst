@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch } from "@/lib/admin/client";
@@ -81,10 +82,11 @@ export default function AdminSubmissionsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Submissions</h1>
-        <p className="mt-1 text-muted-foreground">Read-only view of form submissions from the public site.</p>
-      </div>
+      <AdminPageHeader
+        title="Submissions"
+        description="Messages from parents — resource requests, assessment results, and contact form enquiries."
+        breadcrumbs={[{ label: "Submissions" }]}
+      />
 
       <div className="flex gap-2 border-b pb-2">
         {tabs.map(({ id, label }) => (

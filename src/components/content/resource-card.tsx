@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExternalLink, Play } from "lucide-react";
 import type { ResourceItem } from "@/lib/data/catalog";
 import { PdfDocumentCard } from "@/components/content/pdf-document-card";
+import { TrackedVideo } from "@/components/content/tracked-video";
 import { WordDocumentCard } from "@/components/content/word-document-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,10 +19,12 @@ export function ResourceCard({ resource }: { resource: ResourceItem }) {
     return (
       <Card className="overflow-hidden transition-shadow hover:shadow-md">
         <div className="aspect-video bg-muted">
-          <video controls className="h-full w-full" preload="metadata" title={resource.title}>
-            <source src={resource.videoUrl} type="video/mp4" />
-            Your browser does not support the video tag.
-          </video>
+          <TrackedVideo
+            resourceId={resource.id}
+            videoUrl={resource.videoUrl}
+            title={resource.title}
+            className="h-full w-full"
+          />
         </div>
         <CardHeader>
           <CardTitle className="text-xl">{resource.title}</CardTitle>

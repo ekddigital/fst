@@ -27,6 +27,19 @@ enum ResourceRequestStatus {
   CLOSED
 }
 
+enum BillStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PromotionPlacement {
+  HOME_BANNER
+  TOP_BAR
+  ANNOUNCEMENT
+}
+
 model ContactSubmission {
   id        String   @id @default(cuid())
   name      String   @db.VarChar(191)
@@ -70,9 +83,23 @@ model Resource {
   requestable  Boolean          @default(false)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @default(now()) @updatedAt
+  views        ResourceView[]
 
   @@index([categoryId, sortOrder])
   @@index([published])
+}
+
+model ResourceView {
+  id              String   @id @default(cuid())
+  resourceId      String
+  resource        Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  durationSeconds Int      @default(0)
+  sessionId       String   @db.VarChar(64)
+  createdAt       DateTime @default(now())
+
+  @@index([resourceId])
+  @@index([createdAt])
+  @@index([sessionId])
 }
 
 model ResourceRequest {
@@ -153,4 +180,33 @@ model Article {
   @@index([sortOrder])
   @@index([published])
   @@index([publishedAt])
+}
+
+model Bill {
+  id          String     @id @default(cuid())
+  description String     @db.VarChar(255)
+  amount      Decimal    @db.Decimal(10, 2)
+  status      BillStatus @default(PENDING)
+  dueDate     DateTime?
+  notes       String?    @db.Text
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status])
+  @@index([dueDate])
+}
+
+model Promotion {
+  id        String             @id @default(cuid())
+  title     String             @db.VarChar(255)
+  body      String             @db.Text
+  active    Boolean            @default(true)
+  startDate DateTime?
+  endDate   DateTime?
+  placement PromotionPlacement @default(HOME_BANNER)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([active])
+  @@index([placement])
 }

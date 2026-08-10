@@ -1,83 +1,133 @@
-import Link from "next/link";
-import { ArrowRight, BookOpen, ClipboardList, FolderOpen, MessageSquare, Newspaper } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  BookOpen,
+  ClipboardList,
+  Clock,
+  FolderOpen,
+  MessageSquare,
+  Newspaper,
+  Receipt,
+  Video,
+} from "lucide-react";
+import { SubmissionTrendChart } from "@/components/admin/dashboard-charts";
+import {
+  GettingStartedGuide,
+  QuickActionsPanel,
+  RecentActivityFeed,
+  StatCard,
+} from "@/components/admin/dashboard-sections";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { getDashboardStats, getRecentActivity, getSubmissionTrends } from "@/lib/admin/dashboard";
 import { db, isDatabaseConfigured } from "@/lib/db";
+
+function formatWatchTime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins} min`;
+}
 
 export default async function AdminDashboardPage() {
   if (!isDatabaseConfigured()) {
     return (
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="mt-4 text-muted-foreground">DATABASE_URL is not configured.</p>
+        <AdminPageHeader
+          title="Welcome to your dashboard"
+          description="DATABASE_URL is not configured. Add it to your .env file to get started."
+        />
       </div>
     );
   }
 
-  const [categories, resources, assessments, articles, resourceRequests, assessmentSubmissions, contactSubmissions] =
-    await Promise.all([
-      db.resourceCategory.count(),
-      db.resource.count(),
-      db.assessment.count(),
-      db.article.count(),
-      db.resourceRequest.count(),
-      db.assessmentSubmission.count(),
-      db.contactSubmission.count(),
-    ]);
+  const [stats, activity, trends, pendingRequests] = await Promise.all([
+    getDashboardStats(),
+    getRecentActivity(8),
+    getSubmissionTrends(14),
+    db.resourceRequest.count({ where: { status: "PENDING" } }),
+  ]);
 
-  const stats = [
-    { label: "Categories", value: categories, href: "/admin/categories", icon: FolderOpen },
-    { label: "Resources", value: resources, href: "/admin/resources", icon: BookOpen },
-    { label: "Articles", value: articles, href: "/admin/articles", icon: Newspaper },
-    { label: "Assessments", value: assessments, href: "/admin/assessments", icon: ClipboardList },
-    {
-      label: "Submissions",
-      value: resourceRequests + assessmentSubmissions + contactSubmissions,
-      href: "/admin/submissions",
-      icon: MessageSquare,
-    },
-  ] as const;
+  const totalSubmissions = stats.assessmentSubmissions + stats.contactSubmissions + stats.resourceRequests;
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-2 text-muted-foreground">Manage FST resources, articles, assessments, and submissions.</p>
+      <AdminPageHeader
+        title="Welcome back!"
+        description="Here's what's happening on Fast Start Talking. Use the cards below to see stats at a glance, or jump to a quick action."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Blog Posts"
+          value={stats.articles}
+          sublabel={`${stats.publishedArticles} published`}
+          href="/admin/articles"
+          icon={Newspaper}
+        />
+        <StatCard
+          label="Videos & Resources"
+          value={stats.resources}
+          sublabel={`${stats.videos} videos`}
+          href="/admin/resources"
+          icon={Video}
+        />
+        <StatCard
+          label="Assessments Taken"
+          value={stats.assessmentSubmissions}
+          sublabel={`${stats.assessments} quizzes available`}
+          href="/admin/submissions"
+          icon={ClipboardList}
+        />
+        <StatCard
+          label="Messages & Requests"
+          value={totalSubmissions}
+          sublabel={
+            pendingRequests > 0
+              ? `${pendingRequests} resource requests pending`
+              : `${stats.contactSubmissions} contact messages`
+          }
+          href="/admin/submissions"
+          icon={MessageSquare}
+          highlight={pendingRequests > 0}
+        />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {stats.map(({ label, value, href, icon: Icon }) => (
-          <Link key={label} href={href}>
-            <Card className="transition-shadow hover:shadow-md">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-                <Icon className="size-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold">{value}</p>
-                <p className="mt-2 flex items-center text-sm text-primary">
-                  Manage <ArrowRight className="ml-1 size-3" />
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Content Categories"
+          value={stats.categories}
+          href="/admin/categories"
+          icon={FolderOpen}
+        />
+        <StatCard
+          label="Total Watch Time"
+          value={formatWatchTime(stats.totalWatchSeconds)}
+          sublabel="Across all videos"
+          href="/admin/watch-time"
+          icon={Clock}
+        />
+        <StatCard
+          label="Active Promotions"
+          value={stats.activePromotions}
+          href="/admin/promotions"
+          icon={BookOpen}
+        />
+        <StatCard
+          label="Open Bills"
+          value={stats.pendingBills}
+          sublabel="Pending or overdue"
+          href="/admin/bills"
+          icon={Receipt}
+          highlight={stats.pendingBills > 0}
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick tips</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>Use up/down arrows to reorder categories, resources, articles, and assessment questions.</p>
-          <p>
-            For videos and PDFs, paste a path like <code className="rounded bg-muted px-1">/videos/foo.mp4</code> or an
-            external URL — files in <code className="rounded bg-muted px-1">public/</code> are served automatically.
-          </p>
-          <p>
-            Subcategory (subsection) groups Cambridge resources under KET, PET, or IELTS on the public page.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <SubmissionTrendChart data={trends} />
+        <RecentActivityFeed items={activity} />
+      </div>
+
+      <QuickActionsPanel />
+      <GettingStartedGuide />
     </div>
   );
 }

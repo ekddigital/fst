@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { ExternalLink, Newspaper, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AdminEmptyState } from "@/components/admin/admin-empty-state";
 import { ReorderButtons } from "@/components/admin/reorder-buttons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +48,7 @@ const emptyForm = {
 };
 
 export default function AdminArticlesPage() {
+  const searchParams = useSearchParams();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -63,6 +67,10 @@ export default function AdminArticlesPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") openCreate();
+  }, [searchParams]);
 
   function openCreate() {
     setEditing(null);
@@ -159,16 +167,26 @@ export default function AdminArticlesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Articles</h1>
-          <p className="mt-1 text-muted-foreground">Create, edit, publish, and reorder blog posts.</p>
-        </div>
-        <Button onClick={openCreate}>
-          <Plus className="size-4" /> New article
-        </Button>
-      </div>
+      <AdminPageHeader
+        title="Blog Posts"
+        description="Write and publish articles for parents — tips, exam advice, and updates from Teacher Joe."
+        breadcrumbs={[{ label: "Blog Posts" }]}
+        actions={
+          <Button onClick={openCreate} size="lg">
+            <Plus className="size-4" /> New blog post
+          </Button>
+        }
+      />
 
+      {articles.length === 0 ? (
+        <AdminEmptyState
+          icon={Newspaper}
+          title="No blog posts yet"
+          description="Create your first article to share tips and news with parents visiting the site."
+          actionLabel="Write your first post"
+          onAction={openCreate}
+        />
+      ) : (
       <Table>
         <TableHeader>
           <TableRow>
@@ -218,6 +236,7 @@ export default function AdminArticlesPage() {
           ))}
         </TableBody>
       </Table>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -237,6 +256,7 @@ export default function AdminArticlesPage() {
                   }))
                 }
               />
+              <p className="text-xs text-muted-foreground">The headline parents will see on the blog page</p>
             </div>
             {!editing && (
               <div className="space-y-2">

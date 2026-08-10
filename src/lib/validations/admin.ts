@@ -1,4 +1,4 @@
-import { QuestionType, ResourceType } from "@prisma/client";
+import { BillStatus, PromotionPlacement, QuestionType, ResourceType } from "@prisma/client";
 import { z } from "zod";
 
 const slugSchema = z
@@ -86,3 +86,30 @@ export const articleCreateSchema = z.object({
 });
 
 export const articleUpdateSchema = articleCreateSchema.partial().omit({ slug: true });
+
+export const billCreateSchema = z.object({
+  description: z.string().min(1).max(255),
+  amount: z.coerce.number().positive().max(9999999),
+  status: z.nativeEnum(BillStatus).optional(),
+  dueDate: z.string().datetime().optional().nullable(),
+  notes: z.string().max(5000).optional().nullable(),
+});
+
+export const billUpdateSchema = billCreateSchema.partial();
+
+export const promotionCreateSchema = z.object({
+  title: z.string().min(1).max(255),
+  body: z.string().min(1).max(10000),
+  active: z.boolean().optional(),
+  startDate: z.string().datetime().optional().nullable(),
+  endDate: z.string().datetime().optional().nullable(),
+  placement: z.nativeEnum(PromotionPlacement).optional(),
+});
+
+export const promotionUpdateSchema = promotionCreateSchema.partial();
+
+export const resourceViewSchema = z.object({
+  resourceId: z.string().min(1),
+  durationSeconds: z.number().int().min(0).max(86400),
+  sessionId: z.string().min(8).max(64),
+});

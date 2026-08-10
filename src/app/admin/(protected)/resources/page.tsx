@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ResourceType } from "@prisma/client";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { ReorderButtons } from "@/components/admin/reorder-buttons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +63,7 @@ const emptyForm = {
 };
 
 export default function AdminResourcesPage() {
+  const searchParams = useSearchParams();
   const [categories, setCategories] = useState<Category[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [filterCategoryId, setFilterCategoryId] = useState("");
@@ -91,6 +94,10 @@ export default function AdminResourcesPage() {
   useEffect(() => {
     void loadResources(filterCategoryId || undefined);
   }, [filterCategoryId, loadResources]);
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1" && categories.length > 0) openCreate();
+  }, [searchParams, categories.length]);
 
   function openCreate() {
     setEditing(null);
@@ -207,15 +214,16 @@ export default function AdminResourcesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Resources</h1>
-          <p className="mt-1 text-muted-foreground">Videos, PDFs, articles, and requestable materials.</p>
-        </div>
-        <Button onClick={openCreate}>
-          <Plus className="size-4" /> Add resource
-        </Button>
-      </div>
+      <AdminPageHeader
+        title="Videos & Resources"
+        description="Add videos, PDFs, guides, and links. Organize them by category for the public Videos page."
+        breadcrumbs={[{ label: "Videos & Resources" }]}
+        actions={
+          <Button onClick={openCreate} size="lg">
+            <Plus className="size-4" /> Add resource
+          </Button>
+        }
+      />
 
       <div className="flex items-center gap-3">
         <Label htmlFor="filter">Category</Label>
