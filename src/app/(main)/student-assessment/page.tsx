@@ -3,8 +3,7 @@ import { PageHero } from "@/components/content/page-hero";
 import { ContentSection } from "@/components/content/content-section";
 import { AssessmentForm } from "@/components/forms/assessment-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getArchivePage } from "@/lib/content";
-import { MarkdownContent } from "@/components/content/markdown-content";
+import { getAssessmentBySlug, YOUNG_LEARNERS_ASSESSMENT_SLUG } from "@/lib/data/catalog";
 
 export const metadata: Metadata = {
   title: "Student Assessment",
@@ -12,27 +11,33 @@ export const metadata: Metadata = {
 };
 
 export default async function AssessmentPage() {
-  const page = await getArchivePage("student-assessment-young-learners");
+  const assessment = await getAssessmentBySlug(YOUNG_LEARNERS_ASSESSMENT_SLUG);
+
+  if (!assessment) {
+    return (
+      <>
+        <PageHero title="Student Assessment" description="Assessment is temporarily unavailable." />
+      </>
+    );
+  }
 
   return (
     <>
       <PageHero
         title="Student Assessment — Young Learners"
-        description="This free assessment helps parents understand their child's English skills in vocabulary, listening, grammar, and communication."
+        description="This free assessment helps parents understand their child's English skills in vocabulary, grammar, and reading."
       />
       <ContentSection narrow>
-        {page && (
-          <div className="mb-10">
-            <MarkdownContent content={page.body.split("Start Quiz")[0] ?? page.body} />
-          </div>
-        )}
-
-        <Card className="overflow-hidden border-border/80 shadow-md">
+        <Card className="mb-10 overflow-hidden border-border/80 shadow-md">
           <CardHeader>
-            <CardTitle>Understanding the results</CardTitle>
+            <CardTitle>{assessment.title}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-lg text-muted-foreground">
-            <p>Each section is scored independently:</p>
+          <CardContent className="space-y-4 text-lg text-muted-foreground">
+            {assessment.description && <p>{assessment.description}</p>}
+            <p>
+              The quiz has <strong>{assessment.questions.length} questions</strong> across three sections: Vocabulary,
+              Grammar, and Reading. Each section is scored independently.
+            </p>
             <ul className="list-disc space-y-1 pl-6">
               <li>
                 <strong>8–10 correct:</strong> Strong foundation — ready for more advanced practice
@@ -47,7 +52,7 @@ export default async function AssessmentPage() {
           </CardContent>
         </Card>
 
-        <AssessmentForm />
+        <AssessmentForm assessment={assessment} />
       </ContentSection>
     </>
   );

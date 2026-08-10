@@ -7,6 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ResourceType {
+  VIDEO
+  PDF
+  ARTICLE
+  EXTERNAL
+  GUIDE
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+enum ResourceRequestStatus {
+  PENDING
+  SENT
+  CLOSED
+}
+
 model ContactSubmission {
   id        String   @id @default(cuid())
   name      String   @db.VarChar(191)
@@ -17,14 +37,94 @@ model ContactSubmission {
   @@index([createdAt])
 }
 
-model AssessmentSubmission {
-  id           String   @id @default(cuid())
-  studentName  String   @db.VarChar(191)
-  parentEmail  String   @db.VarChar(191)
-  answers      Json
-  createdAt    DateTime @default(now())
+model ResourceCategory {
+  id          String     @id @default(cuid())
+  slug        String     @unique @db.VarChar(191)
+  title       String     @db.VarChar(255)
+  description String?    @db.Text
+  sortOrder   Int        @default(0)
+  resources   Resource[]
+
+  @@index([sortOrder])
+}
+
+model Resource {
+  id           String           @id @default(cuid())
+  categoryId   String
+  category     ResourceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  slug         String           @unique @db.VarChar(191)
+  title        String           @db.VarChar(255)
+  description  String?          @db.Text
+  type         ResourceType
+  videoUrl     String?          @db.VarChar(512)
+  pdfPath      String?          @db.VarChar(512)
+  externalUrl  String?          @db.VarChar(512)
+  articleSlug  String?          @db.VarChar(191)
+  subsection   String?          @db.VarChar(191)
+  sortOrder    Int              @default(0)
+  published    Boolean          @default(true)
+  requestable  Boolean          @default(false)
+
+  @@index([categoryId, sortOrder])
+  @@index([published])
+}
+
+model ResourceRequest {
+  id            String                @id @default(cuid())
+  fullName      String                @db.VarChar(191)
+  email         String                @db.VarChar(191)
+  wechatId      String?               @db.VarChar(191)
+  resourceSlug  String                @db.VarChar(191)
+  resourceTitle String                @db.VarChar(255)
+  status        ResourceRequestStatus @default(PENDING)
+  createdAt     DateTime              @default(now())
 
   @@index([createdAt])
+  @@index([status])
+}
+
+model Assessment {
+  id          String                 @id @default(cuid())
+  slug        String                 @unique @db.VarChar(191)
+  title       String                 @db.VarChar(255)
+  description String?                @db.Text
+  targetAge   String?                @db.VarChar(64)
+  published   Boolean                @default(true)
+  questions   AssessmentQuestion[]
+  submissions AssessmentSubmission[]
+
+  @@index([published])
+}
+
+model AssessmentQuestion {
+  id            String       @id @default(cuid())
+  assessmentId  String
+  assessment    Assessment   @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  section       String       @db.VarChar(64)
+  sortOrder     Int          @default(0)
+  prompt        String       @db.Text
+  type          QuestionType
+  options       Json?
+  correctAnswer String?      @db.VarChar(512)
+  points        Int          @default(1)
+
+  @@index([assessmentId, sortOrder])
+}
+
+model AssessmentSubmission {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id])
+  studentName  String     @db.VarChar(191)
+  parentEmail  String?    @db.VarChar(191)
+  age          Int?
+  answers      Json
+  score        Int?
+  maxScore     Int?
+  createdAt    DateTime   @default(now())
+
+  @@index([createdAt])
+  @@index([assessmentId])
 }
 
 model Article {
