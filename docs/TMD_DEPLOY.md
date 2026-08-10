@@ -737,7 +737,7 @@ See [TMD_SSH.md](./TMD_SSH.md) for SSH/SFTP server access vs Remote PostgreSQL, 
 
 ### cPanel env var mistake — `DATABASE_URL=DATABASE_URL=...`
 
-If Prisma fails with a connection string that literally starts with `DATABASE_URL=` (double prefix), cPanel **Setup Node.js App → Environment Variables** has the wrong **Value**.
+If Prisma fails with a connection string that literally starts with `DATABASE_URL=` (double prefix), cPanel **Setup Node.js App → Environment Variables** has the wrong **Value**. The same bad value can also appear in **`~/.cl.selector/node-selector.json`** — cPanel mirrors app env vars there, so a malformed entry in either place produces the same symptom.
 
 **Symptom (shell or deploy log):**
 
@@ -745,7 +745,7 @@ If Prisma fails with a connection string that literally starts with `DATABASE_UR
 DATABASE_URL=DATABASE_URL=postgresql://faststar_tmdconnect:...@195.250.26.111:5432/...
 ```
 
-**Fix in cPanel → Setup Node.js App → your FST app → Environment Variables:**
+**Fix in cPanel → Setup Node.js App → your FST app → Environment Variables** (preferred — do **not** hand-edit `node-selector.json`):
 
 | Name | Value (correct) | Wrong |
 |------|-----------------|-------|
@@ -754,8 +754,18 @@ DATABASE_URL=DATABASE_URL=postgresql://faststar_tmdconnect:...@195.250.26.111:54
 - **Name** = variable name only (`DATABASE_URL`).
 - **Value** = raw URL only — no `DATABASE_URL=` prefix, no quotes.
 - On the server use **`127.0.0.1:5432`**, not `195.250.26.111`.
+- Saving in the UI rewrites `node-selector.json` correctly.
 
-After fixing, **Restart** the Node.js app. For Terminal seed/build, use `./scripts/tmd-deploy.sh` (reads `~/coding/fst/.env` under a clean `env -i` so polluted shell vars are ignored).
+After fixing, **Restart** the Node.js app.
+
+**`db:push` hangs on schema-engine:** A prior run may have left a stuck Prisma engine. Kill it before retrying, and run **one deploy at a time** (no overlapping `db:push`, `npm run build`, and cPanel **Deploy HEAD Commit**):
+
+```bash
+pkill -f schema-engine || true
+npm run db:push
+```
+
+For Terminal seed/build, use **`./scripts/tmd-deploy.sh`** — it runs under `env -i` and loads vars only from `~/coding/fst/.env`, ignoring polluted shell or cPanel exports.
 
 ### LVE fork limits — `Resource temporarily unavailable`
 
