@@ -252,4 +252,4 @@ Next.js collects page data against the DB. Fix connectivity (tunnel or remote PG
 
 ## Security — rotate exposed credentials
 
-If database passwords, `ADMIN_PASSWORD`, or SSH-related secrets appeared in screenshots or shared logs, rotate them in cPanel (**PostgreSQL Databases**, server `.env`, cPanel Node env vars) and choose a new admin password. Update [TMD_DEPLOY.md](./TMD_DEPLOY.md) checklist env vars after rotation. Do not paste real passwords into docs or tickets.
+If database passwords, `ADMIN_PASSWORD`, or SSH-related secrets appeared in screenshots or shared logs, rotate them in cPanel (**PostgreSQL Databases**, server `~/coding/fst/.env`) and choose a new admin password. See [TMD_DEPLOY.md](./TMD_DEPLOY.md) → **Managing environment variables**. Do not paste real passwords into docs or tickets.

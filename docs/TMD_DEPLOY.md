@@ -345,7 +345,7 @@ Optional: add `?sslmode=disable` to `DATABASE_URL` if Prisma connection errors m
 
 Equivalent using the template file: `cp .env.example .env` then `nano .env` — same three variables.
 
-In cPanel → **Setup Node.js App** → edit FST app → add the same env vars with **Name** / **Value** only (see [Phase 3 env var format](#phase-3--setup-nodejs-app-cpanel)) → **Start** / **Restart**.
+In cPanel → **Setup Node.js App** → edit FST app → add env vars only if you are **not** using file-based `.env` (see [Managing environment variables](#managing-environment-variables)) → **Start** / **Restart**.
 
 | Step | If it fails |
 |------|-------------|
@@ -434,15 +434,15 @@ If your plan includes **Setup Node.js App** (or **Application Manager**):
 
    The repo includes a custom Next.js server at `server.js` for cPanel/Passenger. `package.json` sets `"start": "node server.js"`.
 
-3. **Environment variables** — add the same values as `.env` (belt-and-suspenders).
+3. **Environment variables** — see **[Managing environment variables](#managing-environment-variables)**. **Recommended:** maintain secrets only in `~/coding/fst/.env` (SSH/`nano`); skip duplicating them in cPanel unless Passenger does not pick up `.env` at runtime on your host.
 
-   In cPanel **Setup Node.js App → Environment Variables**, each row has a **Name** and a **Value**. The **Value** must be the raw secret or URL only — **not** a shell assignment and **not** quoted.
+   If you do use cPanel **Setup Node.js App → Environment Variables**, each row has a **Name** and a **Value**. The **Value** must be the raw secret or URL only — **not** a shell assignment and **not** quoted.
 
    | Name | Value (correct) | Wrong (do not use) |
    |------|-----------------|-------------------|
    | `NODE_ENV` | `production` | `NODE_ENV=production` |
    | `DATABASE_URL` | `postgresql://faststar_tmdconnect:YOUR_PASSWORD@127.0.0.1:5432/faststar_fst?sslmode=disable` | `DATABASE_URL="postgresql://..."` |
-   | `NEXT_PUBLIC_SITE_URL` | `https://faststarttalking.com` | `NEXT_PUBLIC_SITE_URL="https://..."` |
+   | `NEXT_PUBLIC_SITE_URL` | `https://app.faststarttalking.com` | `NEXT_PUBLIC_SITE_URL="https://..."` |
    | `ADMIN_PASSWORD` | `your-strong-admin-password` | `ADMIN_PASSWORD="..."` |
 
    **On the server, always use `127.0.0.1:5432` in `DATABASE_URL`** — not `195.250.26.111`. PostgreSQL runs locally on the shared host; the public IP is only for connecting **from your Mac** when Remote PostgreSQL is enabled (see [TMD_SSH.md](./TMD_SSH.md)).
@@ -468,6 +468,103 @@ node -v && npm -v
 - `/programs`, `/articles` — DB-backed pages
 - `/admin/login` — admin dashboard
 - Contact / assessment forms submit
+
+---
+
+## Managing environment variables
+
+FST reads configuration from `process.env`. On TMD there is **no FST-owned HTTP API** to change env vars — you update the server file or cPanel UI directly.
+
+### Variables FST uses
+
+| Variable | Required | Where set | Notes |
+|----------|----------|-----------|-------|
+| `DATABASE_URL` | **Yes** | `.env` on server | Prisma + runtime; `@127.0.0.1:5432` on server |
+| `NEXT_PUBLIC_SITE_URL` | **Yes** (prod) | `.env` | Public site URL; baked into client bundle at **build** time |
+| `ADMIN_PASSWORD` | One of password **or** API key | `.env` | `/admin/login` |
+| `ADMIN_API_KEY` | One of password **or** API key | `.env` | `Authorization: Bearer …` or `X-Admin-Api-Key` for `/api/admin/*` |
+| `NODE_ENV` | Runtime | cPanel / shell | Usually `production` on server; omit from `.env` locally |
+| `PORT` | Runtime | cPanel Passenger | Assigned by Setup Node.js App; `server.js` defaults to `3000` |
+
+Template with Mac vs server examples: [`.env.example`](../.env.example).
+
+### Recommended workflow: file-based `.env` only (SSH)
+
+**Use a single source of truth:** `~/coding/fst/.env` on the server.
+
+1. SSH or cPanel **Terminal**:
+
+   ```bash
+   source /home/faststar/nodevenv/coding/fst/22/bin/activate && cd ~/coding/fst
+   cp .env.example .env   # first time only
+   nano .env              # edit values; no quotes on server
+   chmod 600 .env
+   ```
+
+2. **Restart** the app in cPanel → **Setup Node.js App** → **Restart** (required after env changes).
+
+3. If you changed `NEXT_PUBLIC_SITE_URL` or other build-time vars, rebuild:
+
+   ```bash
+   source /home/faststar/nodevenv/coding/fst/22/bin/activate && cd ~/coding/fst
+   npm run build
+   ```
+
+**Why file-only?**
+
+- `npm run build` and `prisma db push` run in Terminal and read **`DATABASE_URL` from `.env`** — cPanel UI vars are not visible in that shell unless you export them manually.
+- `.env` is gitignored and survives `git pull` / Deploy HEAD Commit.
+- Avoids maintaining the same secrets in two places (file + cPanel UI).
+
+**Do not** put `195.250.26.111` in server-side `DATABASE_URL` — use `127.0.0.1:5432`. See [Database reference](#database-reference).
+
+### cPanel UI (manual alternative)
+
+cPanel → **Software** → **Setup Node.js App** → your FST app → **Environment Variables**.
+
+- **Name** = variable name only (e.g. `DATABASE_URL`).
+- **Value** = raw value only — no `KEY=` prefix, no surrounding quotes.
+- On some hosts, cPanel UI vars **override** a local `.env` at runtime. Prefer **either** file **or** UI, not both, to avoid drift.
+
+There is **no button in FST** to edit these; only cPanel or SSH.
+
+### cPanel API (advanced — rarely needed)
+
+cPanel exposes **UAPI** for Passenger/Node apps (`PassengerApps/edit_application`, `PassengerApps/register_application`) with `envvar_name[]` and `envvar_value[]` arrays. Official docs: [Application Manager API](https://api.docs.cpanel.net/specifications/cpanel.openapi/application-manager/edit_application).
+
+**Caveats:**
+
+- Requires a **cPanel API token** (cPanel → **Security** → **Manage API Tokens**) and HTTPS calls to port `2083`.
+- **`edit_application` replaces the entire env var set** — you must send all variables on each update, not just the one you changed.
+- Does **not** update `~/coding/fst/.env`; Terminal builds still need the file.
+- Not wired up in this repo — use SSH + `.env` for day-to-day changes.
+
+Example (illustrative — adjust app name and values):
+
+```bash
+uapi --user=faststar PassengerApps edit_application \
+  name=coding/fst \
+  envvar_name='["NODE_ENV","DATABASE_URL","NEXT_PUBLIC_SITE_URL","ADMIN_PASSWORD"]' \
+  envvar_value='["production","postgresql://faststar_tmdconnect:PASSWORD@127.0.0.1:5432/faststar_fst?sslmode=disable","https://app.faststarttalking.com","your-admin-password"]'
+```
+
+Then restart the Node.js app in cPanel.
+
+### Compared to other projects in this monorepo
+
+| Project | Hosting | Env management pattern |
+|---------|---------|------------------------|
+| **fst** (this app) | TMD cPanel + Passenger | **`~/coding/fst/.env` via SSH** (recommended) |
+| **rhub** | VPS / Launchpad | `.env` locally; production via **Launchpad** UI or `lpad` env API (`POST/PATCH /api/projects/[slug]/environment`) |
+| **fom** | Launchpad / Vercel | Platform env UI (`.env.launchpad.production`, Vercel dashboard) — not applicable to TMD |
+
+FST on shared cPanel does **not** have Launchpad-style remote env API; SSH file edits are the practical equivalent.
+
+### Rotating secrets
+
+1. cPanel → **PostgreSQL Databases** — change DB password → update `DATABASE_URL` in server `.env`.
+2. Choose a new `ADMIN_PASSWORD` (or `ADMIN_API_KEY`) → update `.env`.
+3. `chmod 600 .env` → **Restart** Node.js app → `npm run build` if `NEXT_PUBLIC_SITE_URL` changed.
 
 ---
 
@@ -658,8 +755,8 @@ See [Option A — SSH deploy key](#option-a--ssh-deploy-key-recommended) and [te
 
 If `ADMIN_PASSWORD`, database passwords, or other secrets were shared in screenshots, chat, or logs, **rotate them immediately**:
 
-1. cPanel → **PostgreSQL Databases** — change the password for `faststar_tmdconnect`, then update `DATABASE_URL` in server `.env` and cPanel Node env vars (value only — no `DATABASE_URL=` prefix).
-2. Choose a new `ADMIN_PASSWORD` and update `.env` + cPanel env vars.
+1. cPanel → **PostgreSQL Databases** — change the password for `faststar_tmdconnect`, then update `DATABASE_URL` in server `~/coding/fst/.env`.
+2. Choose a new `ADMIN_PASSWORD` (or `ADMIN_API_KEY`) and update `.env`.
 3. Restart the Node.js app after changes.
 
 Never paste real passwords into docs, tickets, or commit messages.
