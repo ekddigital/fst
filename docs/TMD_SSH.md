@@ -1,130 +1,169 @@
-# TMD Hosting SSH — Fast Start Talking
+# TMD Hosting SSH — Fast Start Talking (FST)
 
-SSH and database access for [faststarttalking.com](https://faststarttalking.com) on **TMD Hosting**. Keys stay in `fst/secrets/` (gitignored) and `~/.ssh/tmdconnect`.
+SSH and PostgreSQL access for **FST** on TMD shared hosting (`faststar@s3838`, `195.250.26.111`). Keys live in `fst/secrets/` (gitignored) and `~/.ssh/tmdconnect`.
 
-## FST (TMD) vs FOM (VPS) — same direct-IP pattern
+## Safety on shared hosting (read first)
 
-Both projects use the **server IP in `DATABASE_URL`** — no localhost in `.env`.
+This cPanel account hosts **many existing sites** under `~/` (e.g. `jinanicf.com`, `public_html`, `teacherjoe.faststarttalking.com`). **FST local dev and Prisma only talk to the PostgreSQL database `faststar_fst`.** They do not modify, delete, or deploy to those directories unless you explicitly deploy FST to a new path/subdomain later.
 
-| | **FOM** (`fom/.env`) | **FST** (`fst/.env`) |
-|---|---------------------|----------------------|
-| **Host** | `31.97.41.230` (EKD VPS) | `195.250.26.111` (TMD shared hosting) |
-| **Database** | MySQL `:9909` | PostgreSQL `:5432` |
-| **Pattern** | Direct IP — no SSH tunnel | Direct IP — no SSH tunnel |
-| **Prisma URL shape** | `mysql://USER:PASS@31.97.41.230:9909/fom?...` | `postgresql://faststar_tmdconnect:PASS@195.250.26.111:5432/faststar_fst?sslmode=disable` |
-| **SSH role** | Ops only — **not** used for DB | Ops only — **not** used for DB (tunnel is fallback) |
+| Action | Touches existing sites? |
+|--------|-------------------------|
+| `prisma db push` / `db:seed` on `faststar_fst` | **No** — database only |
+| SSH tunnel (`tmd-psql`) | **No** — forwards port 5432 only |
+| cPanel Remote PostgreSQL (whitelist IP) | **No** — firewall rule for PG only |
+| Future FST deploy to new subdomain/folder | **Only if you choose to** |
 
-**Primary `DATABASE_URL` (`.env`):**
+Never commit `.env`, `secrets/`, or private keys.
+
+## Connectivity snapshot (dev machine, Aug 2026)
+
+| Test | Result |
+|------|--------|
+| Mac public IP (`curl ifconfig.me`) | **`31.97.41.230`** — add this in cPanel **Remote PostgreSQL** if you want direct `:5432` from your Mac |
+| cPanel Remote DB hosts already listed | `195.250.26.108`, `195.250.26.83` (not your Mac) |
+| `nc` → `195.250.26.111:5432` | **No response / unreachable** (PG not exposed to your IP) |
+| `ssh tmd` (BatchMode) | **`Permission denied (publickey)`** — fix key authorize + agent (below) |
+| SSH tunnel → `127.0.0.1:5433` | **Not up** until SSH works |
+| `npm run db:push` (direct `.env` URL) | **P1001** — can't reach `195.250.26.111:5432` |
+| `npx tsc --noEmit` | **Pass** |
+| `npm run build` | **Fails at page data** — build hits DB at `195.250.26.111:5432` while unreachable |
+
+## Recommended path for local Prisma dev
+
+**Option A — SSH tunnel (recommended on shared hosting)**  
+No cPanel Remote PostgreSQL entry required. Traffic goes over SSH to localhost PostgreSQL on the server.
+
+1. Fix SSH (see [Troubleshooting](#permission-denied-publickey)).
+2. Terminal A (keep open):
+
+   ```bash
+   ssh -N tmd-psql
+   # forwards Mac 127.0.0.1:5433 → server 127.0.0.1:5432
+   ```
+
+3. **Dev-only** URL (do not commit — use `.env.local` or temporary edit with comment):
+
+   ```bash
+   # DEV ONLY — requires: ssh -N tmd-psql
+   DATABASE_URL="postgresql://faststar_tmdconnect:DB_PASSWORD@127.0.0.1:5433/faststar_fst?sslmode=disable"
+   ```
+
+4. From `fst/`:
+
+   ```bash
+   npm run db:push
+   npm run db:seed
+   npx tsc --noEmit && npm run build
+   ```
+
+Keep production-style `.env` as `@195.250.26.111:5432` when remote access is enabled, or set server-side env on deploy.
+
+**Option B — Remote PostgreSQL (direct IP, like FOM pattern)**  
+Add **`31.97.41.230`** in cPanel → **Remote PostgreSQL** / **Manage Access Hosts**, then verify:
+
+```bash
+nc -G 3 -zv 195.250.26.111 5432
+psql "postgresql://faststar_tmdconnect:PASS@195.250.26.111:5432/faststar_fst?sslmode=disable" -c "SELECT 1"
+```
+
+Primary `.env` shape (never commit real password):
 
 ```bash
 DATABASE_URL="postgresql://faststar_tmdconnect:DB_PASSWORD@195.250.26.111:5432/faststar_fst?sslmode=disable"
 ```
 
-**Password encoding:** URL-encode special characters (e.g. `#` → `%23`, `!` → `%21`, `@` → `%40`).
+URL-encode password special characters (`#` → `%23`, etc.).
 
-## Remote PostgreSQL required on TMD
+**Option C — Server-side only (future deploy)**  
+SSH in, use an isolated app directory (not `public_html` unless intended), run `npm run db:push` there with server-local `DATABASE_URL` (often `127.0.0.1:5432` on the host). Good for CI/deploy; not required for day-one Mac dev once A or B works.
 
-TMD shared hosting binds PostgreSQL to localhost on the server. Port **5432 is not open** on `195.250.26.111` until you enable remote access in cPanel.
+## FST (TMD) vs FOM (VPS)
 
-**Tested from dev machine (Aug 2026):**
-
-- `31.97.41.230:9909` (FOM) — MySQL responds.
-- `195.250.26.111:5432` (FST) — connection timeout until cPanel **Remote PostgreSQL** whitelists your IP.
-
-**Enable remote access:**
-
-1. cPanel → **Remote PostgreSQL** (or **Manage Access Hosts**)
-2. Add your public IP (and Launchpad egress IP for production)
-3. Verify:
-
-```bash
-nc -zv 195.250.26.111 5432
-psql "postgresql://faststar_tmdconnect:DB_PASSWORD@195.250.26.111:5432/faststar_fst?sslmode=disable" -c "SELECT 1"
-```
-
-4. Set real password in `fst/.env` (never commit)
-
-**Keep `@195.250.26.111:5432` in `.env` even while waiting for cPanel** — same as FOM uses `@31.97.41.230`. Do not switch to `127.0.0.1` unless you deliberately use the tunnel fallback below.
+| | **FOM** | **FST** |
+|---|---------|---------|
+| Host | `31.97.41.230` | `195.250.26.111` |
+| Engine | MySQL `:9909` | PostgreSQL `:5432` |
+| Remote access | Open on VPS | cPanel whitelist or SSH tunnel |
 
 ## Names on TMD (do not confuse)
 
-|cPanel / SSH artifact|What it is|Example / where to find|
-|----------------------|----------|-------------------------|
-|**`tmdconnect`**|SSH **key pair** name (public + private)|cPanel → SSH Access → Manage SSH Keys; local file `~/.ssh/tmdconnect`|
-|**`faststar`**|SSH **shell login** user and **cPanel account prefix**|Prefixes DB names/users: `faststar_fst`, `faststar_tmdconnect`|
-|**PostgreSQL user**|Database user for Prisma / `DATABASE_URL`|**cPanel → PostgreSQL Databases** — e.g. `faststar_tmdconnect`|
-
-The `faststar_` prefix on database and user names is **normal cPanel behavior** — not an error.
-
-Using `faststar_tmdconnect` as the PostgreSQL username is fine. It shares a name with the SSH key (`tmdconnect`) by coincidence; they are separate credentials in cPanel.
+| Artifact | Meaning |
+|----------|---------|
+| **`tmdconnect`** | SSH **key pair** name (`~/.ssh/tmdconnect`) |
+| **`faststar`** | cPanel / SSH user; prefixes `faststar_fst`, `faststar_tmdconnect` |
+| **`faststar_tmdconnect`** | PostgreSQL user (separate from SSH key password) |
 
 ## Server
 
 | Setting | Value |
 |--------|--------|
-| Site | faststarttalking.com |
-| HostName (IP) | `195.250.26.111` |
-| SSH user | `faststar` (confirm in TMD **SSH Access**) |
+| HostName | `195.250.26.111` |
+| SSH user | `faststar` |
 | SSH port | `22` |
-| PostgreSQL database | `faststar_fst` |
+| PostgreSQL DB | `faststar_fst` |
 | PostgreSQL user | `faststar_tmdconnect` |
 
-Use cPanel → **PostgreSQL Databases** for passwords (not stored in git).
+Passwords: cPanel → **PostgreSQL Databases** only.
 
 ## SSH setup (Mac)
 
-Private key: copy `fst/secrets/tmdconnect` → `~/.ssh/tmdconnect` (`chmod 600`).
+1. Copy `fst/secrets/tmdconnect` → `~/.ssh/tmdconnect` (`chmod 600`).
+2. cPanel → **SSH Access → Manage SSH Keys** — import `tmdconnect.pub`, **Authorize**.
+3. Load key for non-interactive use (passphrase keys):
 
-In TMD panel: **SSH Access → Manage SSH Keys** — import `tmdconnect.pub`, then **Authorize**.
+   ```bash
+   ssh-add --apple-use-keychain ~/.ssh/tmdconnect
+   ```
 
-`~/.ssh/config` aliases:
-
-- **`tmd`** — interactive shell
-- **`tmd-psql`** — PostgreSQL tunnel fallback (`LocalForward 5433 → 127.0.0.1:5432`)
-
-```bash
-ssh tmd
-ssh -o BatchMode=yes -o ConnectTimeout=15 tmd echo connected   # expect: connected
-```
-
-## PostgreSQL tunnel fallback (optional)
-
-Use only if **Remote PostgreSQL** is not enabled and you need local dev before cPanel is configured. This is **not** the primary config — `.env` should still use `@195.250.26.111:5432` when possible.
-
-**Terminal A — keep open:**
+4. `~/.ssh/config` aliases:
+   - **`tmd`** — shell
+   - **`tmd-psql`** — `LocalForward 5433 127.0.0.1:5432`
 
 ```bash
-ssh -N tmd-psql
-# or: ssh -L 5433:127.0.0.1:5432 tmd
+ssh -o BatchMode=yes -o ConnectTimeout=15 tmd echo connected
 ```
 
-**Temporary local override** (do not commit):
+## Verify PostgreSQL on server (after SSH works)
+
+Read-only checks; safe for shared hosting:
 
 ```bash
-DATABASE_URL="postgresql://faststar_tmdconnect:DB_PASSWORD@127.0.0.1:5433/faststar_fst?sslmode=disable"
+ssh tmd "which psql; psql --version"
+ssh tmd "psql -U faststar_tmdconnect -d faststar_fst -c 'SELECT 1 AS ok'"
+# List DBs only if your host allows — avoid touching other users' data
+ssh tmd "psql -U faststar_tmdconnect -d faststar_fst -c '\conninfo'"
 ```
 
-The `127.0.0.1:5433` address exists only on your Mac while the tunnel runs. The tunnel forwards to `127.0.0.1:5432` **on the remote server** — not the same as putting localhost in production `.env`.
+## `.env` (local, not in git)
 
-## Security
+Redacted shape:
 
-- Never commit `secrets/`, private keys, or `.env` with real credentials.
-- `secrets/` and `.env` are in `fst/.gitignore`.
+```bash
+DATABASE_URL="postgresql://faststar_tmdconnect:***@195.250.26.111:5432/faststar_fst?sslmode=disable"
+```
+
+Use `@127.0.0.1:5433` only while tunnel is running (dev).
 
 ## Troubleshooting
 
 ### `Permission denied (publickey)`
 
-1. cPanel → **SSH Access** → **Manage SSH Keys**
-2. **Import** `fst/secrets/tmdconnect.pub` → **Authorize**
-3. Retry: `ssh -o BatchMode=yes -o ConnectTimeout=15 tmd echo ok`
+1. Confirm pubkey fingerprint matches authorized key in cPanel:
 
-Confirm **HostName** in `~/.ssh/config` is `195.250.26.111`, not `127.0.0.1`.
+   ```bash
+   ssh-keygen -lf ~/.ssh/tmdconnect.pub
+   # expect SHA256:3jaDUmNedUlYusquw5whLwxNvecKKUFIndDYdoB4u3w
+   ```
 
-### Can't reach database at `195.250.26.111:5432`
+2. Re-import `fst/secrets/tmdconnect.pub` → **Authorize**.
+3. `ssh-add --apple-use-keychain ~/.ssh/tmdconnect` (BatchMode needs agent or empty passphrase).
+4. `HostName` must be `195.250.26.111`, not `127.0.0.1`.
 
-1. Test port: `nc -zv -w 5 195.250.26.111 5432`
-2. If timeout → enable cPanel **Remote PostgreSQL** for your IP
-3. Confirm user/database: `faststar_tmdconnect`, `faststar_fst`
-4. URL-encode password special characters in `DATABASE_URL`
-5. Tunnel fallback: `ssh -N tmd-psql` + temporary `@127.0.0.1:5433` URL (local only)
+### Can't reach `195.250.26.111:5432`
+
+1. Whitelist **`31.97.41.230`** in Remote PostgreSQL, **or** use `ssh -N tmd-psql` + `@127.0.0.1:5433`.
+2. Confirm user/db names and URL-encoded password.
+
+### `npm run build` fails with P1001
+
+Next.js collects page data against the DB. Fix connectivity (tunnel or remote PG) before build, or adjust app to skip DB at build time (separate change).
