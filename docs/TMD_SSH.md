@@ -2,6 +2,28 @@
 
 SSH and database access for [faststarttalking.com](https://faststarttalking.com) on **TMD Hosting**. Keys stay in `fst/secrets/` (gitignored) and `~/.ssh/tmdconnect`.
 
+## FST (TMD) vs FOM (VPS) — why `.env` hosts differ
+
+These are **different servers** with different MySQL exposure. FOM’s IP-based `DATABASE_URL` is not copy-pasteable to FST without changing TMD/cPanel settings.
+
+| | **FOM** (`fom/.env`) | **FST** (`fst/.env`) |
+|---|---------------------|----------------------|
+| **Host** | `31.97.41.230` (EKD VPS) | `195.250.26.111` (TMD shared hosting) |
+| **MySQL port** | `9909` (custom, firewall-open) | `3306` on server localhost only |
+| **Pattern** | Direct IP — no SSH tunnel | SSH tunnel → `127.0.0.1:3307` on your Mac |
+| **Why** | VPS MySQL accepts remote clients (user `@your-ip`) | TMD binds MySQL to `127.0.0.1`; public `:3306` is blocked |
+| **SSH role** | Ops only (port `7722`, user in VPS secrets) — **not** used for DB | Required for local dev DB (`ssh -N tmd-mysql`) |
+| **Prisma URL shape** | `mysql://USER:PASS@31.97.41.230:9909/fom?...` | `mysql://USER:PASS@127.0.0.1:3307/fst?...` (tunnel up) |
+
+**Tested from dev machine (Aug 2026):**
+
+- `31.97.41.230:9909` — MySQL responds (connection reaches server).
+- `195.250.26.111:3306` — connection timeout (`ERROR 2003`); remote MySQL not available by default.
+
+**To use FOM-style direct IP for FST:** cPanel → **Remote MySQL** → add your public IP → confirm `mysql -h 195.250.26.111 -P 3306 -u DB_USER -p` works → then set `DATABASE_URL` to `@195.250.26.111:3306`. Until then, keep the tunnel and `@127.0.0.1:3307`.
+
+**Password encoding:** URL-encode special characters in `DATABASE_URL` (e.g. `#` → `%23`, `!` → `%21`). A literal `#` in the password breaks URL parsing (everything after `#` is treated as a fragment).
+
 ## Server
 
 | Setting | Value |
@@ -34,6 +56,27 @@ ssh -N tmd-mysql
 ssh -N tmd-psql
 ```
 
+
+## Remote MySQL (optional — FOM-style direct IP)
+
+TMD shared hosting does **not** expose MySQL on the public IP unless you enable it:
+
+1. cPanel → **Remote MySQL** (or **Manage Access Hosts**)
+2. Add your current public IP (or `%` for any host — less secure)
+3. Use the MySQL user/database from cPanel → **MySQL Databases**
+4. Verify from your Mac:
+
+```bash
+mysql -h 195.250.26.111 -P 3306 -u DB_USER -p -e "SELECT 1"
+```
+
+5. If that succeeds, `.env` can use:
+
+```bash
+DATABASE_URL="mysql://DB_USER:DB_PASSWORD@195.250.26.111:3306/fst?ssl=false&connect_timeout=60&pool_timeout=60&timeout=60"
+```
+
+If step 4 times out, remote MySQL is still disabled — use the SSH tunnel (below).
 
 ## Why you see 127.0.0.1 (and where 195.250.26.111 belongs)
 
