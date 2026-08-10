@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ReorderButtons } from "@/components/admin/reorder-buttons";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch, slugify, swapIds } from "@/lib/admin/client";
+import { AdminTableSkeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/ui/loading-screen";
+import { ButtonLoadingContent } from "@/components/ui/loading-inline";
 
 type Category = {
   id: string;
@@ -125,8 +128,9 @@ export default function AdminCategoriesPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-primary" />
+      <div className="space-y-6">
+        <LoadingScreen message="Loading categories…" variant="section" gradient={false} className="min-h-[200px]" />
+        <AdminTableSkeleton rows={5} columns={4} />
       </div>
     );
   }
@@ -236,8 +240,7 @@ export default function AdminCategoriesPage() {
               Cancel
             </Button>
             <Button onClick={() => void save()} disabled={saving || !form.title}>
-              {saving ? <Loader2 className="animate-spin" /> : null}
-              Save
+              <ButtonLoadingContent loading={saving} loadingText="Saving…" idleText="Save" />
             </Button>
           </DialogFooter>
         </DialogContent>

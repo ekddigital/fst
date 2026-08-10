@@ -22,7 +22,7 @@ export default async function VideosPage() {
         title="Videos & Resources"
         description="Explore English learning videos, Cambridge preparation materials, and resources designed to support students from early learning through advanced English development."
       />
-      <ContentSection>
+      <ContentSection className="content-fade-in">
         <div className="space-y-16">
           {categories.length === 0 ? (
             <p className="text-center text-lg text-muted-foreground">

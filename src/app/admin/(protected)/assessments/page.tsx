@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { QuestionType } from "@prisma/client";
 import { ReorderButtons } from "@/components/admin/reorder-buttons";
@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { adminFetch, slugify, swapIds } from "@/lib/admin/client";
+import { LoadingScreen } from "@/components/ui/loading-screen";
+import { ButtonLoadingContent, LoadingInline } from "@/components/ui/loading-inline";
 
 type Assessment = {
   id: string;
@@ -57,6 +59,7 @@ export default function AdminAssessmentsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
   const [assessmentDialog, setAssessmentDialog] = useState(false);
   const [questionDialog, setQuestionDialog] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
@@ -75,9 +78,11 @@ export default function AdminAssessmentsPage() {
   }, []);
 
   const loadQuestions = useCallback(async (assessmentId: string) => {
+    setQuestionsLoading(true);
     const res = await adminFetch<{ questions: Question[] }>(`/api/admin/assessments/${assessmentId}/questions`);
     if (res.success) setQuestions(res.data.questions);
     else toast.error(res.error.message);
+    setQuestionsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -254,11 +259,7 @@ export default function AdminAssessmentsPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingScreen message="Loading assessments…" variant="section" gradient={false} />;
   }
 
   return (
@@ -311,7 +312,13 @@ export default function AdminAssessmentsPage() {
                     </Button>
                   </div>
                   <div className="space-y-2">
-                    {questions.map((question, index) => (
+                    {questionsLoading ? (
+                      <div className="py-8">
+                        <LoadingInline message="Loading questions…" />
+                      </div>
+                    ) : (
+                      <>
+                        {questions.map((question, index) => (
                       <div key={question.id} className="flex items-start gap-3 rounded-md border p-3">
                         <ReorderButtons
                           onUp={() => void reorderQuestion(question.id, "up")}
@@ -336,8 +343,10 @@ export default function AdminAssessmentsPage() {
                         </div>
                       </div>
                     ))}
-                    {questions.length === 0 && (
+                    {!questionsLoading && questions.length === 0 && (
                       <p className="py-4 text-center text-sm text-muted-foreground">No questions yet.</p>
+                    )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -404,8 +413,7 @@ export default function AdminAssessmentsPage() {
               Cancel
             </Button>
             <Button onClick={() => void saveAssessment()} disabled={saving || !assessmentForm.title}>
-              {saving ? <Loader2 className="animate-spin" /> : null}
-              Save
+              <ButtonLoadingContent loading={saving} loadingText="Saving…" idleText="Save" />
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -477,8 +485,7 @@ export default function AdminAssessmentsPage() {
               Cancel
             </Button>
             <Button onClick={() => void saveQuestion()} disabled={saving || !questionForm.prompt}>
-              {saving ? <Loader2 className="animate-spin" /> : null}
-              Save
+              <ButtonLoadingContent loading={saving} loadingText="Saving…" idleText="Save" />
             </Button>
           </DialogFooter>
         </DialogContent>

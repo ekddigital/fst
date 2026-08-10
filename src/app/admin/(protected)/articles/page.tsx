@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ReorderButtons } from "@/components/admin/reorder-buttons";
@@ -18,7 +18,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { adminFetch, slugify, swapIds } from "@/lib/admin/client";
+import { adminFetch, getArticleImageFromMarkdown, slugify, swapIds } from "@/lib/admin/client";
+import { AdminTableSkeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/ui/loading-screen";
+import { ButtonLoadingContent } from "@/components/ui/loading-inline";
 
 type Article = {
   id: string;
@@ -83,12 +86,14 @@ export default function AdminArticlesPage() {
   async function save() {
     setSaving(true);
     const slug = form.slug || slugify(form.title);
+    const coverImage = form.coverImage || getArticleImageFromMarkdown(form.content) || null;
+
     const payload = {
       slug,
       title: form.title,
       description: form.description || null,
       content: form.content,
-      coverImage: form.coverImage || null,
+      coverImage,
       published: form.published,
     };
 
@@ -132,7 +137,7 @@ export default function AdminArticlesPage() {
     const next = swapIds(ids, articleId, direction);
     if (!next) return;
 
-    const res = await adminFetch("/api/admin/articles/reorder", {
+    const res = await adminFetch<{ articles: Article[] }>("/api/admin/articles/reorder", {
       method: "POST",
       body: JSON.stringify({ ids: next }),
     });
@@ -145,8 +150,9 @@ export default function AdminArticlesPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-primary" />
+      <div className="space-y-6">
+        <LoadingScreen message="Loading articles…" variant="section" gradient={false} className="min-h-[200px]" />
+        <AdminTableSkeleton rows={6} columns={5} />
       </div>
     );
   }
@@ -241,26 +247,29 @@ export default function AdminArticlesPage() {
             <div className="space-y-2">
               <Label>Description (excerpt)</Label>
               <Textarea
+                rows={2}
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                rows={2}
               />
             </div>
             <div className="space-y-2">
-              <Label>Cover image path</Label>
+              <Label>Cover image URL</Label>
               <Input
                 placeholder="/images/example.webp"
                 value={form.coverImage}
                 onChange={(e) => setForm((f) => ({ ...f, coverImage: e.target.value }))}
               />
+              <p className="text-xs text-muted-foreground">
+                Optional. Auto-detected from the first markdown image in content if left blank.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Content (Markdown)</Label>
               <Textarea
-                value={form.content}
-                onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
                 rows={16}
                 className="font-mono text-sm"
+                value={form.content}
+                onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
               />
             </div>
             <label className="flex items-center gap-2 text-sm">
@@ -277,8 +286,7 @@ export default function AdminArticlesPage() {
               Cancel
             </Button>
             <Button onClick={() => void save()} disabled={saving || !form.title || !form.content}>
-              {saving ? <Loader2 className="animate-spin" /> : null}
-              Save
+              <ButtonLoadingContent loading={saving} loadingText="Saving…" idleText="Save" />
             </Button>
           </DialogFooter>
         </DialogContent>

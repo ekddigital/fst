@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch } from "@/lib/admin/client";
+import { AdminTableSkeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/ui/loading-screen";
 
 type Tab = "resources" | "assessments" | "contact";
 
@@ -101,8 +102,9 @@ export default function AdminSubmissionsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="size-8 animate-spin text-primary" />
+        <div className="space-y-4">
+          <LoadingScreen message="Loading submissions…" variant="section" gradient={false} className="min-h-[160px]" />
+          <AdminTableSkeleton rows={6} columns={5} />
         </div>
       ) : tab === "resources" ? (
         <Table>

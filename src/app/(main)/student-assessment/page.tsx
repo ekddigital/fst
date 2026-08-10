@@ -27,7 +27,7 @@ export default async function AssessmentPage() {
         title="Student Assessment — Young Learners"
         description="This free assessment helps parents understand their child's English skills in vocabulary, grammar, and reading."
       />
-      <ContentSection narrow>
+      <ContentSection narrow className="content-fade-in">
         <Card className="mb-10 overflow-hidden border-border/80 shadow-md">
           <CardHeader>
             <CardTitle>{assessment.title}</CardTitle>

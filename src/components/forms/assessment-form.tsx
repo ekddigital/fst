@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { createAssessmentSchema, normalizeAssessmentPayload, type AssessmentInput } from "@/lib/validations/forms";
 import type { AssessmentWithQuestions } from "@/lib/data/catalog";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/form";
 import { messageFromApiJson, setFormFieldErrors } from "@/lib/forms/api-errors";
 import { cn } from "@/lib/utils";
+import { ButtonLoadingContent } from "@/components/ui/loading-inline";
+import { LoadingScreen } from "@/components/ui/loading-screen";
 
 type AssessmentFormProps = {
   assessment: AssessmentWithQuestions;
@@ -45,6 +47,7 @@ export function AssessmentForm({ assessment }: AssessmentFormProps) {
   const schema = useMemo(() => createAssessmentSchema(questionIds), [questionIds]);
 
   const [step, setStep] = useState(0);
+  const [stepTransitioning, setStepTransitioning] = useState(false);
   const [submitState, setSubmitState] = useState<"idle" | "success" | "error">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<SubmitResult | null>(null);
@@ -104,11 +107,23 @@ export function AssessmentForm({ assessment }: AssessmentFormProps) {
   }
 
   function goNext() {
-    if (step < totalSteps - 1) setStep((s) => s + 1);
+    if (step < totalSteps - 1) {
+      setStepTransitioning(true);
+      window.setTimeout(() => {
+        setStep((s) => s + 1);
+        setStepTransitioning(false);
+      }, 200);
+    }
   }
 
   function goPrev() {
-    if (step > 0) setStep((s) => s - 1);
+    if (step > 0) {
+      setStepTransitioning(true);
+      window.setTimeout(() => {
+        setStep((s) => s - 1);
+        setStepTransitioning(false);
+      }, 200);
+    }
   }
 
   if (submitState === "success" && result) {
@@ -144,7 +159,9 @@ export function AssessmentForm({ assessment }: AssessmentFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8" noValidate>
+      {submitting && <LoadingScreen message="Checking your answers…" variant="overlay" showLogo />}
+
+      <form onSubmit={form.handleSubmit(onSubmit)} className="content-fade-in space-y-8" noValidate>
         <input type="hidden" {...form.register("assessmentId")} />
 
         {submitState === "error" && submitError && (
@@ -241,40 +258,46 @@ export function AssessmentForm({ assessment }: AssessmentFormProps) {
         </div>
 
         {currentQuestion && (
-          <Card
-            className={cn(
-              "transition-shadow",
-              answers[currentQuestion.id] ? "border-primary/30 shadow-md" : undefined,
+          <div className="relative min-h-[280px]">
+            {stepTransitioning ? (
+              <LoadingScreen message="Loading next question…" variant="section" gradient={false} className="min-h-[280px]" />
+            ) : (
+              <Card
+                className={cn(
+                  "content-fade-in transition-shadow",
+                  answers[currentQuestion.id] ? "border-primary/30 shadow-md" : undefined,
+                )}
+              >
+                <CardHeader>
+                  <CardTitle className="text-xl leading-snug">{currentQuestion.prompt}</CardTitle>
+                  <CardDescription>Select the best answer</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(currentQuestion.options ?? []).map((option) => (
+                    <label
+                      key={option}
+                      className={cn(
+                        "flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-all",
+                        answers[currentQuestion.id] === option
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-border hover:border-primary/30 hover:bg-muted/40",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name={currentQuestion.id}
+                        value={option}
+                        checked={answers[currentQuestion.id] === option}
+                        onChange={() => selectAnswer(currentQuestion.id, option)}
+                        className="size-5 accent-primary"
+                      />
+                      <span className="text-lg">{option}</span>
+                    </label>
+                  ))}
+                </CardContent>
+              </Card>
             )}
-          >
-            <CardHeader>
-              <CardTitle className="text-xl leading-snug">{currentQuestion.prompt}</CardTitle>
-              <CardDescription>Select the best answer</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {(currentQuestion.options ?? []).map((option) => (
-                <label
-                  key={option}
-                  className={cn(
-                    "flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-all",
-                    answers[currentQuestion.id] === option
-                      ? "border-primary bg-primary/5 shadow-sm"
-                      : "border-border hover:border-primary/30 hover:bg-muted/40",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name={currentQuestion.id}
-                    value={option}
-                    checked={answers[currentQuestion.id] === option}
-                    onChange={() => selectAnswer(currentQuestion.id, option)}
-                    className="size-5 accent-primary"
-                  />
-                  <span className="text-lg">{option}</span>
-                </label>
-              ))}
-            </CardContent>
-          </Card>
+          </div>
         )}
 
         {form.formState.errors.answers?.message && (
@@ -301,8 +324,11 @@ export function AssessmentForm({ assessment }: AssessmentFormProps) {
             </Button>
           ) : (
             <Button type="submit" disabled={submitting || !answers[currentQuestion?.id ?? ""]} size="lg">
-              {submitting && <Loader2 className="animate-spin" aria-hidden />}
-              Submit assessment
+              <ButtonLoadingContent
+                loading={submitting}
+                loadingText="Checking your answers…"
+                idleText="Submit assessment"
+              />
             </Button>
           )}
         </div>

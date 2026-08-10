@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { ButtonLoadingContent } from "@/components/ui/loading-inline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,9 +78,8 @@ function LoginForm() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? <Loader2 className="animate-spin" /> : null}
-              Sign in
+            <Button type="submit" className="w-full" disabled={loading} size="lg">
+              <ButtonLoadingContent loading={loading} loadingText="Signing in…" idleText="Sign in" />
             </Button>
           </form>
 

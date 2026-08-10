@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Send } from "lucide-react";
+import { CheckCircle2, Send } from "lucide-react";
 import { contactSchema, type ContactInput } from "@/lib/validations/forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { messageFromApiJson, setFormFieldErrors } from "@/lib/forms/api-errors";
+import { ButtonLoadingContent } from "@/components/ui/loading-inline";
 
 export function ContactForm() {
   const [submitState, setSubmitState] = useState<"idle" | "success" | "error">("idle");
@@ -64,7 +65,7 @@ export function ContactForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="content-fade-in space-y-6" noValidate>
         {submitState === "success" && (
           <Alert variant="success">
             <CheckCircle2 className="size-5" aria-hidden />
@@ -126,8 +127,12 @@ export function ContactForm() {
         />
 
         <Button type="submit" disabled={submitting} size="lg" className="w-full sm:w-auto">
-          {submitting ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />}
-          Send message
+          <ButtonLoadingContent
+            loading={submitting}
+            loadingText="Sending…"
+            idleIcon={<Send aria-hidden />}
+            idleText="Send message"
+          />
         </Button>
       </form>
     </Form>

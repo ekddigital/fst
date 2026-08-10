@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Send } from "lucide-react";
+import { CheckCircle2, Send } from "lucide-react";
 import { resourceRequestSchema, normalizeResourceRequestPayload, type ResourceRequestInput } from "@/lib/validations/forms";
 import type { RequestableResource } from "@/lib/data/catalog";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { messageFromApiJson, setFormFieldErrors } from "@/lib/forms/api-errors";
+import { ButtonLoadingContent } from "@/components/ui/loading-inline";
 
 type ResourceRequestFormProps = {
   resources: RequestableResource[];
@@ -80,7 +81,7 @@ export function ResourceRequestForm({ resources }: ResourceRequestFormProps) {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="content-fade-in space-y-6" noValidate>
             {submitState === "success" && successEmail && (
               <Alert variant="success">
                 <CheckCircle2 className="size-5" aria-hidden />
@@ -175,8 +176,12 @@ export function ResourceRequestForm({ resources }: ResourceRequestFormProps) {
             />
 
             <Button type="submit" disabled={submitting} size="lg" className="w-full sm:w-auto">
-              {submitting ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />}
-              Submit request
+              <ButtonLoadingContent
+                loading={submitting}
+                loadingText="Sending…"
+                idleIcon={<Send aria-hidden />}
+                idleText="Submit request"
+              />
             </Button>
           </form>
         </Form>
