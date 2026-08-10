@@ -2,11 +2,11 @@
 # cPanel Git Version Control — "Deploy HEAD Commit"
 # Repo and app live at the same path (Setup Node.js App points here).
 # Requires .env on the server before first deploy (DATABASE_URL, etc.).
-# After deploy: cPanel → Setup Node.js App → Restart.
+# After deploy: cPanel → Setup Node.js App → Restart (Passenger does not auto-restart on deploy).
+# For GitHub push → auto pull + deploy, see docs/TMD_DEPLOY.md § Automatic deploy on GitHub push.
 deployment:
   tasks:
     - export DEPLOYPATH=/home/faststar/coding/fst
-    - export NODE_ENV=production
-    - /bin/bash -lc 'cd $DEPLOYPATH && npm ci --no-audit --progress=false'
-    - /bin/bash -lc 'cd $DEPLOYPATH && npx prisma generate'
-    - /bin/bash -lc 'cd $DEPLOYPATH && npm run build'
+    - export TMD_SKIP_GIT_PULL=1
+    - export TMD_SKIP_SEED=1
+    - /bin/bash -lc 'cd "$DEPLOYPATH" && bash scripts/tmd-deploy.sh'

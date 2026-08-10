@@ -580,22 +580,14 @@ FST on shared cPanel does **not** have Launchpad-style remote env API; SSH file 
    git push origin main
    ```
 
-### Deploy on TMD
+### Deploy on TMD (manual)
 
 1. cPanel → **Git Version Control** → select `fst`
 2. **Pull or Deploy** → **Update from Remote** (pull latest `main`)
-3. **Deploy HEAD Commit** — runs `.cpanel.yml` automatically:
-
-   ```yaml
-   # .cpanel.yml (in repo root)
-   deployment:
-     tasks:
-       - export DEPLOYPATH=/home/faststar/coding/fst
-       - export NODE_ENV=production
-       - npm ci + prisma generate + npm run build (in $DEPLOYPATH)
-   ```
-
+3. **Deploy HEAD Commit** — runs `.cpanel.yml` → `scripts/tmd-deploy.sh` (see below)
 4. cPanel → **Setup Node.js App** → **Restart** the FST application
+
+**Automatic deploy on push:** once the [GitHub webhook](#automatic-deploy-on-github-push) is configured, steps 2–3 run without opening cPanel. You still **Restart** the Node.js app after each deploy (cPanel does not restart Passenger from `.cpanel.yml`).
 
 **Schema changes only:** after editing `prisma/schema.prisma`, SSH in and run `npm run db:push` before or after deploy. `.cpanel.yml` does **not** run `db:push` or `db:seed` on every deploy (by design).
 
@@ -608,22 +600,109 @@ source /home/faststar/nodevenv/coding/fst/22/bin/activate && cd ~/coding/fst && 
 ```mermaid
 flowchart LR
   Mac[Mac: develop] -->|git push| GH[GitHub main]
-  GH -->|cPanel Pull| Server[~/coding/fst]
-  Server -->|Deploy HEAD Commit| Build[npm ci + build]
-  Build --> Node[cPanel Node.js App]
-  Node --> Sub[subdomain]
+  GH -->|webhook| CP[cPanel Git pull + deploy]
+  CP --> Server[~/coding/fst]
+  Server -->|.cpanel.yml| Build[tmd-deploy.sh]
+  Build --> Node[cPanel Node.js App restart]
+  Node --> Sub[app.faststarttalking.com]
   Server --> PG[(faststar_fst)]
 ```
 
 ---
 
+## Automatic deploy on GitHub push
+
+cPanel **Git Version Control** can pull from GitHub and run **Deploy HEAD Commit** (`.cpanel.yml`) when it receives a webhook. One push to `main` replaces manual **Update from Remote** + **Deploy HEAD Commit**.
+
+### Prerequisites
+
+- Repo cloned in cPanel at `/home/faststar/coding/fst` with SSH deploy key (see [Option A](#option-a--ssh-deploy-key-recommended))
+- **Setup Node.js App** already created (Node **22**, root `coding/fst`)
+- **`~/coding/fst/.env`** exists on the server with valid `DATABASE_URL`, `ADMIN_PASSWORD`, `NEXT_PUBLIC_SITE_URL` — **not** in git
+- At least one successful manual **Deploy HEAD Commit** (confirms `.cpanel.yml` and build work)
+
+### Step 1 — Copy the cPanel webhook URL
+
+1. cPanel → **Git Version Control**
+2. Click **Manage** next to the `fst` repository
+3. Open **Pull or Deploy** (wording may vary: **Pull and Deploy**)
+4. Copy the **Webhook URL** shown for this repository (HTTPS URL unique to your account/repo)
+
+Keep this URL private — anyone with it can trigger a pull/deploy on your server.
+
+### Step 2 — Add the webhook in GitHub
+
+1. GitHub → [ekddigital/fst](https://github.com/ekddigital/fst) → **Settings** → **Webhooks** → **Add webhook**
+2. **Payload URL:** paste the cPanel Webhook URL from Step 1
+3. **Content type:** `application/json`
+4. **Secret:** leave empty unless cPanel shows a shared secret for your host (most TMD setups use URL-only auth)
+5. **Which events:** **Just the push event**
+6. **Active:** checked → **Add webhook**
+
+GitHub sends a `push` payload after each push to any branch. cPanel typically pulls the configured tracking branch (`main`) and runs deployment tasks when the push matches.
+
+### Step 3 — Verify
+
+1. Make a trivial commit on `main` and push:
+
+   ```bash
+   git push origin main
+   ```
+
+2. GitHub → **Settings** → **Webhooks** → your webhook → **Recent Deliveries** — confirm **200** response
+3. cPanel → **Git Version Control** → **Manage** → **Last Deployment Information** (or deploy log: `~/.cpanel/logs/vc_*_git_deploy.log`)
+4. cPanel → **Setup Node.js App** → **Restart** the FST app (required after every deploy)
+
+### Optional — cPanel “Pull on push” toggle
+
+Some cPanel versions expose **Pull on push** or **Automatic pull** on the repository **Manage** page. If present, enable it so the webhook both updates the clone and runs `.cpanel.yml`. If absent, the webhook URL alone usually performs pull + deploy in one request.
+
+### Limitations on TMD shared hosting
+
+| Limitation | Mitigation |
+|------------|------------|
+| **No Node app auto-restart** | `.cpanel.yml` cannot restart Passenger. **Restart** Setup Node.js App after each deploy (manual or scheduled). |
+| **LVE process limits** | `npm ci` + `next build` is heavy. **Do not** trigger multiple deploys in parallel (avoid pushing several commits in seconds, or firing webhook + manual deploy at once). Wait for one deploy to finish (~5–15 min). |
+| **`.env` not in git** | Webhook deploy does not create or update secrets. Maintain `~/coding/fst/.env` on the server separately. |
+| **No `db:push` / `db:seed` on deploy** | Schema migrations: SSH and run `npm run db:push`. Seed only when needed: `./scripts/tmd-deploy.sh` (without `TMD_SKIP_SEED=1`). |
+| **Webhook is account-specific** | Do not reuse the URL across repos; create one webhook per cPanel Git repo. |
+| **Private repo** | GitHub webhook only notifies cPanel; the server still pulls via SSH deploy key configured in cPanel Git. |
+
+### Rollback
+
+- **Disable auto-deploy:** GitHub → Webhooks → disable or delete the webhook; use manual **Pull or Deploy** when needed
+- **Redeploy previous commit:** cPanel Git → **Manage** → checkout or reset to a known good commit, then **Deploy HEAD Commit**
+
+---
+
 ## `.cpanel.yml` — automated deploy tasks
 
-The repo includes `.cpanel.yml` at the root. cPanel runs these shell commands when you click **Deploy HEAD Commit**:
+The repo includes `.cpanel.yml` at the root. cPanel runs these commands when you click **Deploy HEAD Commit** (or when the GitHub webhook triggers deploy):
 
-- `npm ci` — reproducible install from `package-lock.json`
-- `npx prisma generate` — refresh Prisma client after schema/pull changes
-- `npm run build` — production Next.js build
+```yaml
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/faststar/coding/fst
+    - export TMD_SKIP_GIT_PULL=1
+    - export TMD_SKIP_SEED=1
+    - /bin/bash -lc 'cd "$DEPLOYPATH" && bash scripts/tmd-deploy.sh'
+```
+
+`scripts/tmd-deploy.sh` (shared with manual Terminal deploy):
+
+- Activates **nodevenv** (Node 22) and sets `NPM_CONFIG_PRODUCTION=false`
+- `npm ci` (or `npm install` if no lockfile)
+- `npx prisma generate`
+- Loads `DATABASE_URL`, `ADMIN_PASSWORD`, `NEXT_PUBLIC_SITE_URL` from **`~/coding/fst/.env`** under `env -i` (ignores polluted cPanel shell vars)
+- Skips `db:seed` when `TMD_SKIP_SEED=1` (routine webhook deploys)
+- `npm run build` — verifies `.next/BUILD_ID`
+
+Manual deploy from Terminal/SSH (includes `git pull` and seed):
+
+```bash
+cd ~/coding/fst
+bash scripts/tmd-deploy.sh
+```
 
 **Prerequisites before first Deploy HEAD Commit:**
 

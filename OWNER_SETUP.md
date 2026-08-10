@@ -46,6 +46,7 @@ Full step-by-step (clone → `.env` → build → Node.js app → ongoing Pull/D
 - [ ] **Create subdomain** — e.g. `app.faststarttalking.com` (new docroot, not `public_html`)
 - [ ] **Setup Node.js App** in cPanel — application root `coding/fst`, restart after each deploy
 - [ ] **Deploy loop** — push to GitHub → cPanel Pull → **Deploy HEAD Commit** (`.cpanel.yml`) → restart Node app
+- [ ] **Auto-deploy webhook** — cPanel Git → Manage → copy Webhook URL → GitHub → Settings → Webhooks (push events) — see [docs/TMD_DEPLOY.md § Automatic deploy](docs/TMD_DEPLOY.md#automatic-deploy-on-github-push)
 
 SSH and PostgreSQL dev access: [docs/TMD_SSH.md](docs/TMD_SSH.md).
 

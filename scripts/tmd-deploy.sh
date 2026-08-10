@@ -1,29 +1,44 @@
 #!/usr/bin/env bash
-# Manual FST deploy on TMD (cPanel Terminal or SSH).
+# FST deploy on TMD (cPanel Terminal, SSH, or .cpanel.yml "Deploy HEAD Commit").
 # Uses env -i for db:seed/build so cPanel Node env pollution cannot break Prisma.
+#
+# Environment:
+#   TMD_SKIP_GIT_PULL=1  — skip git pull (set by .cpanel.yml; cPanel already checked out HEAD)
+#   TMD_SKIP_SEED=1      — skip npm run db:seed (recommended for routine deploys)
+#   DEPLOYPATH           — app root (default: /home/faststar/coding/fst)
+#   ENV_FILE             — path to .env (default: $DEPLOYPATH/.env)
 set -euo pipefail
 
 DEPLOYPATH="${DEPLOYPATH:-/home/faststar/coding/fst}"
 NODEVENV_ACTIVATE="${NODEVENV_ACTIVATE:-/home/faststar/nodevenv/coding/fst/22/bin/activate}"
 ENV_FILE="${ENV_FILE:-$DEPLOYPATH/.env}"
 NODE_BIN="/home/faststar/nodevenv/coding/fst/22/bin"
+TMD_SKIP_GIT_PULL="${TMD_SKIP_GIT_PULL:-0}"
+TMD_SKIP_SEED="${TMD_SKIP_SEED:-0}"
 
 cd "$DEPLOYPATH"
 
-# Untracked server.js (legacy cPanel copy) blocks `git pull` now that server.js is tracked on main.
-if [[ -f server.js ]] && ! git ls-files --error-unmatch server.js >/dev/null 2>&1; then
-  echo "Removing untracked server.js so git pull can proceed..."
-  rm -f server.js
-fi
+if [[ "$TMD_SKIP_GIT_PULL" != "1" ]]; then
+  # Untracked server.js (legacy cPanel copy) blocks `git pull` now that server.js is tracked on main.
+  if [[ -f server.js ]] && ! git ls-files --error-unmatch server.js >/dev/null 2>&1; then
+    echo "Removing untracked server.js so git pull can proceed..."
+    rm -f server.js
+  fi
 
-git pull origin main
+  git pull origin main
+fi
 
 # shellcheck source=/dev/null
 source "$NODEVENV_ACTIVATE"
 export PATH="${NODE_BIN}:$PATH"
 export NPM_CONFIG_PRODUCTION=false
 
-npm install
+if [[ -f package-lock.json ]]; then
+  npm ci --no-audit --progress=false
+else
+  npm install --no-audit --progress=false
+fi
+
 npx prisma generate
 
 load_env_var() {
@@ -60,9 +75,13 @@ run_clean() {
     "$@"
 }
 
-if ! run_clean npm run db:seed; then
-  echo "npm run db:seed failed; retrying with npx tsx..."
-  run_clean npx tsx prisma/seed.ts
+if [[ "$TMD_SKIP_SEED" != "1" ]]; then
+  if ! run_clean npm run db:seed; then
+    echo "npm run db:seed failed; retrying with npx tsx..."
+    run_clean npx tsx prisma/seed.ts
+  fi
+else
+  echo "Skipping db:seed (TMD_SKIP_SEED=1)."
 fi
 
 run_clean npm run build
