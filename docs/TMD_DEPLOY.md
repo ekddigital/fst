@@ -27,112 +27,7 @@ GitHub is **private** and cPanel cannot prompt for HTTPS credentials. Use **SSH 
 | **B — Public repo** | Settings → Change visibility → Public; keep HTTPS clone URL | Only if you accept a public codebase |
 | **C — PAT in HTTPS URL** | `https://TOKEN@github.com/ekddigital/fst.git` | Avoid — token visible in cPanel/logs |
 
-**Repo visibility:** `ekddigital/fst` is **private** (unauthenticated GitHub API returns 404; cPanel HTTPS clone fails as above). Verify anytime: `gh repo view ekddigital/fst --json visibility` (requires `gh auth login`).
-
-Official cPanel: [Set Up Access to Private Repositories](https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-set-up-access-to-private-repositories/).
-
-### Option A — SSH deploy key (recommended)
-
-**1. cPanel Terminal** (or `ssh tmd`):
-
-```bash
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-ssh-keygen -t ed25519 -f ~/.ssh/github_fst_deploy -C "fst-cpanel-deploy" -N ""
-cat ~/.ssh/github_fst_deploy.pub
-```
-
-**2. GitHub** → [ekddigital/fst](https://github.com/ekddigital/fst) → **Settings → Deploy keys → Add deploy key**
-
-- Title: `TMD cPanel fst`
-- Key: paste `github_fst_deploy.pub`
-- **Allow write access:** off (read-only is enough for clone/pull)
-
-**3. SSH config on server** — copy from [templates/github_fst_deploy_ssh_config.example](./templates/github_fst_deploy_ssh_config.example):
-
-```bash
-cat >> ~/.ssh/config << 'EOF'
-Host github.com
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/github_fst_deploy
-  IdentitiesOnly yes
-  StrictHostKeyChecking accept-new
-EOF
-chmod 600 ~/.ssh/config ~/.ssh/github_fst_deploy
-```
-
-**4. Test:**
-
-```bash
-ssh -T git@github.com
-# Hi ekddigital/fst! You've successfully authenticated...
-git ls-remote git@github.com:ekddigital/fst.git HEAD
-```
-
-**5. cPanel → Git Version Control**
-
-- **Create** (first time) **or** edit repository → change clone URL to SSH
-- If UI already failed on HTTPS, delete the broken repo entry or use **Clone a Repository** with SSH URL only after the test above passes
-
-| Field | Value |
-|-------|-------|
-| Clone URL | `git@github.com:ekddigital/fst.git` |
-| Repository Path | `/home/faststar/coding/fst` |
-| Name | `fst` |
-| Branch | `main` |
-
-Alternative: clone in Terminal first, then **Add Existing Repository** in cPanel (see [Immediate steps](#immediate-steps-cpanel-terminal) below).
-
-### Option B — Make repo public
-
-GitHub → **Settings → General → Danger Zone → Change repository visibility → Public**. Then cPanel **Create** with `https://github.com/ekddigital/fst.git` works without credentials. Re-evaluate if the repo should stay public.
-
-### Option C — Personal access token in clone URL
-
-Not recommended: token may appear in cPanel settings and deploy logs. Prefer Option A.
-
-### Immediate steps (cPanel Terminal)
-
-Do this **right now** if you have Terminal access and can add the deploy key to GitHub:
-
-```bash
-cd ~
-mkdir -p coding
-cd coding
-# After deploy key + ~/.ssh/config (Option A):
-git clone git@github.com:ekddigital/fst.git fst
-ls -la fst/package.json fst/.cpanel.yml
-```
-
-Then in cPanel → **Git Version Control** → **Add Existing Repository** (wording may vary):
-
-| Field | Value |
-|-------|-------|
-| Repository Path | `/home/faststar/coding/fst` |
-| Remote URL | `git@github.com:ekddigital/fst.git` |
-| Branch | `main` |
-
-Continue with [Phase 2 — First-time setup on server](#phase-2--first-time-setup-on-server-terminal).
-
----
-
-## Private repo + cPanel Git (HTTPS error)
-
-If **Create** fails with:
-
-```text
-fatal: could not read Username for 'https://github.com': No such device or address
-```
-
-GitHub is **private** and cPanel cannot prompt for HTTPS credentials. Use **SSH + deploy key** (recommended), make the repo public, or embed a PAT in the URL (not recommended).
-
-| Option | Summary | When to use |
-|--------|---------|-------------|
-| **A — SSH deploy key** | Server key → GitHub Deploy keys; clone `git@github.com:ekddigital/fst.git` | **Recommended** — read-only, no password in UI |
-| **B — Public repo** | Settings → Change visibility → Public; keep HTTPS clone URL | Only if you accept a public codebase |
-| **C — PAT in HTTPS URL** | `https://TOKEN@github.com/ekddigital/fst.git` | Avoid — token visible in cPanel/logs |
-
-**Repo visibility:** `ekddigital/fst` is **private** (unauthenticated GitHub API returns 404; cPanel HTTPS clone fails as above). Verify anytime: `gh repo view ekddigital/fst --json visibility` (requires `gh auth login`).
+**Repo visibility:** If the repo is **private**, unauthenticated HTTPS clone fails as above — use Option A or B. If you already made `ekddigital/fst` **public**, HTTPS clone in cPanel works without credentials. Verify: GitHub → repo **Settings**, or `gh repo view ekddigital/fst --json visibility`.
 
 Official cPanel: [Set Up Access to Private Repositories](https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-set-up-access-to-private-repositories/).
 
@@ -257,7 +152,7 @@ Never commit `secrets/`, `.env`, `.env.local`, or private keys. Create `.env` **
 | PostgreSQL user | `faststar_tmdconnect` |
 | Server-side DB host | `127.0.0.1:5432` |
 
-The repo is **private**. Use **SSH + deploy key** ([Option A](#option-a--ssh-deploy-key-recommended)); HTTPS without credentials will fail in cPanel.
+The repo may be **public** (HTTPS clone works) or **private** (use [SSH deploy key](#option-a--ssh-deploy-key-recommended)). If HTTPS clone fails with a username prompt error, see [Private repo + cPanel Git](#private-repo--cpanel-git-https-error).
 
 ---
 
@@ -278,9 +173,79 @@ Complete [Option A — SSH deploy key](#option-a--ssh-deploy-key-recommended) on
 3. Click **Create**
 4. Wait for the clone to finish — confirm `package.json`, `prisma/`, `src/`, and `.cpanel.yml` are present
 
+5. Continue with **[Post-clone checklist](#post-clone-checklist-start-here-after-clone-succeeds)** (`.env`, `npm install`, DB, build, Node.js app).
+
 If you see the HTTPS username error, you used `https://github.com/...` — switch to SSH or follow [Private repo + cPanel Git](#private-repo--cpanel-git-https-error).
 
 **Do not** clone into `public_html` or any existing site folder.
+
+---
+
+
+---
+
+## Post-clone checklist (start here after clone succeeds)
+
+Use this when cPanel Git **Create** finished successfully — e.g. path `/home/faststar/coding/fst`, branch `main`.
+
+**Clone / HTTPS error (already fixed?):** If cPanel showed `could not read Username for 'https://github.com'`, either **make the repo public** (GitHub → Settings → Change visibility) and use `https://github.com/ekddigital/fst.git`, or keep the repo private and use an **SSH deploy key** — see [Private repo + cPanel Git (HTTPS error)](#private-repo--cpanel-git-https-error).
+
+**PostgreSQL on the server:** Use **`127.0.0.1:5432`** in `DATABASE_URL` when running commands **on TMD** (cPanel Terminal or SSH). Do **not** use `195.250.26.111` in server-side `.env` — that IP is for connecting **from your Mac** when Remote PostgreSQL is enabled. See [Database reference](#database-reference).
+
+### 1. Confirm files
+
+In cPanel **Terminal** (or `ssh tmd`):
+
+```bash
+cd ~/coding/fst
+git rev-parse --short HEAD   # e.g. 09ec427 on main
+ls -la package.json prisma/schema.prisma .cpanel.yml
+```
+
+### 2. Create `.env`, install, DB, build
+
+Replace `YOUR_PASSWORD` and `your-admin-password` with real values. URL-encode special characters in the DB password (e.g. `#` → `%23`).
+
+```bash
+cd ~/coding/fst
+cat > .env << 'EOF'
+DATABASE_URL=postgresql://faststar_tmdconnect:YOUR_PASSWORD@127.0.0.1:5432/faststar_fst
+ADMIN_PASSWORD=your-admin-password
+NEXT_PUBLIC_SITE_URL=https://faststarttalking.com
+EOF
+chmod 600 .env
+
+node -v    # expect 18+ or 20+
+npm install
+npx prisma generate
+npm run db:push
+npm run db:seed
+npm run build
+```
+
+Optional: add `?sslmode=disable` to `DATABASE_URL` if Prisma connection errors mention SSL on localhost.
+
+Equivalent using the template file: `cp .env.example .env` then `nano .env` — same three variables.
+
+| Step | If it fails |
+|------|-------------|
+| `npm install` | Node too old — use cPanel **Setup Node.js App** or `nvm` if available; need Node 18+ |
+| `db:push` / `db:seed` | Wrong password, wrong host (`127.0.0.1` not `195.250.26.111`), or DB/user not created in cPanel |
+| `npm run build` | Often P1001 — DB unreachable; fix `DATABASE_URL` and ensure PostgreSQL is running locally |
+
+Verify `.next/` exists after build.
+
+### 3. Setup Node.js App (cPanel)
+
+If not done yet: cPanel → **Setup Node.js App** → **Create Application** — application root `coding/fst`, startup `npm run start`, production URL on a **subdomain** (not `public_html`). Copy the same env vars as `.env`. See [Phase 3 — Setup Node.js App](#phase-3--setup-nodejs-app-cpanel).
+
+### 4. Ongoing deploys
+
+On your Mac: develop → `npx tsc --noEmit && npm run build` → `git push origin main`.
+
+On TMD: cPanel → **Git Version Control** → `fst` → **Update from Remote** → **Deploy HEAD Commit** → **Setup Node.js App** → **Restart**.
+
+Schema changes: SSH in and run `npm run db:push` (deploy does not run push/seed every time).
 
 ---
 
