@@ -45,72 +45,48 @@ Quick reference:
 
 ```bash
 ssh tmd
-ssh -L 3307:localhost:3306 tmd    # MySQL tunnel
-ssh -L 5433:localhost:5432 tmd    # PostgreSQL tunnel
+ssh -N tmd-psql    # optional tunnel fallback only (see docs/TMD_SSH.md)
 ```
 
 ---
 
-## Database (MySQL)
+## Database (PostgreSQL on TMD)
 
-FST uses **MySQL** via Prisma. Connection string format:
+FST uses **PostgreSQL** via Prisma on TMD cPanel. cPanel prefixes database names and users with the account username (`faststar`):
+
+- Database: `faststar_fst`
+- User: `faststar_tmdconnect`
+- Server: `195.250.26.111:5432`
+
+**Primary connection string** (same direct-IP pattern as FOM):
 
 ```
-mysql://DB_USER:DB_PASSWORD@DB_HOST:3306/fst
+postgresql://faststar_tmdconnect:DB_PASSWORD@195.250.26.111:5432/faststar_fst?sslmode=disable
 ```
 
 Set as `DATABASE_URL` in `.env.local` (local) and Launchpad env (production). **Never commit real passwords or connection strings.**
 
-### Find or create the database on outline-vpn
-
-SSH in, then inspect common locations:
-
-```bash
-ssh outline-vpn
-
-# Check if MySQL/MariaDB is running
-systemctl status mysql mariadb 2>/dev/null
-docker ps | grep -i mysql
-
-# Look for existing app env files (placeholders only — do not copy into git)
-find /var/www -maxdepth 4 -name ".env*" -type f 2>/dev/null
-grep -r DATABASE_URL /var/www --include=".env*" 2>/dev/null | head
-
-# If MySQL CLI is available
-mysql -e "SHOW DATABASES;"
-```
-
-### Create a new database (if needed)
-
-```bash
-mysql -u root -p
-```
-
-```sql
-CREATE DATABASE fst CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'fst_app'@'localhost' IDENTIFIED BY 'YOUR_STRONG_PASSWORD';
-GRANT ALL PRIVILEGES ON fst.* TO 'fst_app'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-For remote access (Launchpad host → VPS MySQL), you may need `'fst_app'@'%'` and firewall rules — restrict to Launchpad egress IP when possible.
-
-### Local `.env.local`
-
-```bash
-cp .env.example .env.local
-# Edit DATABASE_URL with values from the server (never commit this file)
-```
+- [ ] **Enable cPanel Remote PostgreSQL** — add your dev IP and Launchpad egress IP so `195.250.26.111:5432` accepts connections
+- [ ] **Test connectivity** — `nc -zv 195.250.26.111 5432`
 
 ### Sync schema
 
-After `DATABASE_URL` is set:
+After `DATABASE_URL` is set with real password:
 
 ```bash
 npm run db:generate && npm run db:push && npm run db:seed
 ```
 
-Without `DATABASE_URL`, the site builds and runs but contact/assessment forms return a friendly unavailable message.
+See [docs/TMD_SSH.md](docs/TMD_SSH.md) for SSH setup and tunnel fallback (if Remote PostgreSQL is not yet enabled).
+
+### Local `.env.local`
+
+```bash
+cp .env.example .env.local
+# Set DATABASE_URL with @195.250.26.111:5432 and password from cPanel → PostgreSQL Databases
+```
+
+Without a working `DATABASE_URL`, the site builds but pages that query the DB may fail at build/runtime.
 
 ### Admin dashboard
 
@@ -152,7 +128,7 @@ npm run db:seed
 - [ ] **Create Launchpad project** — [lpad.ekddigital.com](https://lpad.ekddigital.com) → New Project — (one-time)
 - [ ] **Upload env vars** — `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL`, `ADMIN_PASSWORD` or `ADMIN_API_KEY` (production URL)
 - [ ] **Custom domain + DNS** — point domain to Launchpad; set `NEXT_PUBLIC_SITE_URL` to production URL
-- [ ] **Database reachable from Launchpad** — ensure MySQL on outline-vpn accepts connections from Launchpad host
+- [ ] **Database reachable from Launchpad** — enable cPanel Remote PostgreSQL for Launchpad egress IP, or confirm direct `@195.250.26.111:5432` works
 - [ ] **Push to `main`** → confirm Launchpad deploy success
 
 ---
