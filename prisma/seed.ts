@@ -3,8 +3,123 @@ import {
   QuestionType,
   ResourceType,
 } from "@prisma/client";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 const db = new PrismaClient();
+
+const ARCHIVE_DIR = path.join(process.cwd(), "site-data", "pages");
+
+/** Archive folder slugs → public URL slugs */
+const ARTICLE_SLUG_MAP: Record<string, string> = {
+  "5-daily-habits-that-improve-your-english": "5-daily-habits-that-improve-your-english",
+  "ielts-writing-tips-for-better-exam-results": "ielts-writing-tips-for-better-exam-results",
+  "2026__07__23__why-take-cambridge-a2-key-ket": "why-take-cambridge-a2-key-ket",
+  "2026__07__28__helping-your-child-build-english-skills-a-parents-guide":
+    "helping-your-child-build-english-skills",
+  "2026__08__05__what-ielts-score-is-required-for-entrance-to-universities-in-america":
+    "ielts-score-for-american-universities",
+  "2026__08__06__when-should-students-start-preparing-for-the-ielts-exam":
+    "when-to-start-ielts-preparation",
+  "2026__08__07__are-online-english-lessons-effective-for-young-children-what-parents-should-know":
+    "online-english-lessons-for-young-children",
+};
+
+function stripFrontMatter(raw: string): { title: string; description: string; body: string } {
+  const lines = raw.split("\n");
+  let title = "Fast Start Talking";
+  let description = "";
+  let bodyStart = 0;
+
+  if (lines[0]?.startsWith("# ")) {
+    title = lines[0].replace(/^#\s+/, "").replace(/\s*-\s*Fast Start Talking\s*$/, "").trim();
+    bodyStart = 1;
+  }
+
+  for (let i = bodyStart; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("**Description:**")) {
+      description = line.replace("**Description:**", "").trim();
+    }
+    if (line.trim() === "---" && i > 2) {
+      bodyStart = i + 1;
+      break;
+    }
+  }
+
+  let body = lines.slice(bodyStart).join("\n").trim();
+  body = body.replace(/\*\*Note:\*\* Contains Lorem ipsum placeholder text\n*/i, "");
+  body = body.replace(/Lorem ipsum dolor sit amet[^.]*\./gi, "");
+  return { title, description, body };
+}
+
+function mapImageUrls(body: string, metadata?: { assets?: { images?: Array<{ url: string; local: string }> } }): string {
+  let result = body;
+  if (metadata?.assets?.images) {
+    for (const img of metadata.assets.images) {
+      const filename = path.basename(img.local);
+      result = result.replaceAll(img.url, `/images/${filename}`);
+    }
+  }
+  result = result.replace(
+    /https:\/\/faststarttalking\.com\/wp-content\/uploads\/[^)\s"]+/g,
+    (url) => `/images/${decodeURIComponent(url.split("/").pop() ?? "")}`,
+  );
+  return result;
+}
+
+function getCoverImage(body: string): string | null {
+  const match = body.match(/!\[[^\]]*\]\((\/images\/[^)]+)\)/);
+  return match?.[1] ?? null;
+}
+
+async function seedArticles() {
+  const archiveSlugs = Object.keys(ARTICLE_SLUG_MAP);
+  let sortOrder = 0;
+
+  for (const archiveSlug of archiveSlugs) {
+    const routeSlug = ARTICLE_SLUG_MAP[archiveSlug];
+    const pageDir = path.join(ARCHIVE_DIR, archiveSlug);
+
+    try {
+      const [contentRaw, metadataRaw] = await Promise.all([
+        fs.readFile(path.join(pageDir, "content.md"), "utf8"),
+        fs.readFile(path.join(pageDir, "metadata.json"), "utf8").catch(() => null),
+      ]);
+      const metadata = metadataRaw ? (JSON.parse(metadataRaw) as { assets?: { images?: Array<{ url: string; local: string }> } }) : undefined;
+      const parsed = stripFrontMatter(contentRaw);
+      const title = parsed.title || routeSlug;
+      const description = parsed.description || null;
+      const content = mapImageUrls(parsed.body, metadata);
+      const coverImage = getCoverImage(content);
+      sortOrder += 1;
+
+      await db.article.upsert({
+        where: { slug: routeSlug },
+        update: {
+          title,
+          description,
+          content,
+          coverImage,
+          published: true,
+          sortOrder,
+        },
+        create: {
+          slug: routeSlug,
+          title,
+          description,
+          content,
+          coverImage,
+          published: true,
+          sortOrder,
+          publishedAt: new Date(),
+        },
+      });
+    } catch {
+      console.warn(`  ⚠ Skipped article seed for ${archiveSlug} (site-data not found)`);
+    }
+  }
+}
 
 const YOUNG_LEARNERS_SLUG = "young-learners";
 
@@ -228,7 +343,7 @@ async function seedResources() {
       description:
         "Teacher Joe helping a young learner practise alphabet sounds, reading skills, and phonics through interactive activities.",
       type: ResourceType.VIDEO,
-      videoUrl: "/videos/Felix-class.mp4",
+      videoUrl: "/videos/Candy.mp4",
       sortOrder: 2,
     },
     {
@@ -238,7 +353,7 @@ async function seedResources() {
       description:
         "An engaging classroom lesson demonstrating problem and solution language skills.",
       type: ResourceType.VIDEO,
-      videoUrl: "/videos/Candy.mp4",
+      videoUrl: "/videos/Felix-class.mp4",
       sortOrder: 3,
     },
     {
@@ -366,6 +481,11 @@ async function main() {
     db.resource.count({ where: { requestable: true } }),
   ]);
   console.log(`  ✓ ${counts[0]} categories, ${counts[1]} requestable resources`);
+
+  console.log("Seeding articles…");
+  await seedArticles();
+  const articleCount = await db.article.count();
+  console.log(`  ✓ ${articleCount} articles`);
 }
 
 main()
