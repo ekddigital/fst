@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(191)
+  email     String   @db.VarChar(191)
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model AssessmentSubmission {
+  id           String   @id @default(cuid())
+  studentName  String   @db.VarChar(191)
+  parentEmail  String   @db.VarChar(191)
+  answers      Json
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Article {
+  id          String   @id @default(cuid())
+  slug        String   @unique @db.VarChar(191)
+  title       String   @db.VarChar(255)
+  description String?  @db.Text
+  content     String   @db.LongText
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([publishedAt])
+}

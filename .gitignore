@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env*.local
+
+# Prisma
+prisma/*.db
+
+# OS
+.DS_Store
+
+# Scraped site mirror (large local-only content)
+site-data/*
+!site-data/README.md
