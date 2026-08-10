@@ -19,14 +19,19 @@ Private key: copy `fst/secrets/tmdconnect` → `~/.ssh/tmdconnect` (`chmod 600`)
 
 In TMD panel: **SSH Access → Manage SSH Keys** — import `tmdconnect.pub`, then **Authorize**.
 
-`~/.ssh/config` aliases:
+`~/.ssh/config` aliases (in `~/.ssh/config` on your Mac):
 
-- **`tmd`** / **`fst-tmd`** — shell only
-- **`tmd-tunnel`** — includes `LocalForward 3307 → localhost:3306` and `5433 → localhost:5432`
+- **`tmd`** — interactive shell
+- **`tmd-mysql`** — MySQL tunnel only (`LocalForward 3307 → 127.0.0.1:3306`)
+- **`tmd-psql`** — PostgreSQL tunnel only (`LocalForward 5433 → 127.0.0.1:5432`)
 
 ```bash
 ssh tmd
-ssh -o BatchMode=yes -o ConnectTimeout=10 tmd echo ok   # expect: ok
+ssh -o BatchMode=yes -o ConnectTimeout=15 tmd echo connected   # expect: connected
+
+# DB tunnels (keep running in a terminal)
+ssh -N tmd-mysql
+ssh -N tmd-psql
 ```
 
 ## MySQL (Prisma `DATABASE_URL`)
@@ -36,8 +41,8 @@ On typical TMD shared hosting, MySQL listens on **127.0.0.1:3306 on the server**
 **Terminal A — keep open:**
 
 ```bash
-ssh -L 3307:127.0.0.1:3306 tmd
-# or: ssh tmd-tunnel
+ssh -N tmd-mysql
+# or: ssh -L 3307:127.0.0.1:3306 tmd
 ```
 
 **Terminal B — app / Prisma** — in `fst/.env` (gitignored):
@@ -53,8 +58,7 @@ If remote MySQL is enabled for your IP in cPanel, you may use `@195.250.26.111:3
 ## PostgreSQL (future)
 
 ```bash
-ssh -L 5433:127.0.0.1:5432 tmd
-# or use ssh tmd-tunnel
+ssh -N tmd-psql
 # Connect clients to 127.0.0.1:5433
 ```
 
