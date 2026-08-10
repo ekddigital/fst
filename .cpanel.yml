@@ -1,0 +1,12 @@
+---
+# cPanel Git Version Control — "Deploy HEAD Commit"
+# Repo and app live at the same path (Setup Node.js App points here).
+# Requires .env on the server before first deploy (DATABASE_URL, etc.).
+# After deploy: cPanel → Setup Node.js App → Restart.
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/faststar/coding/fst
+    - export NODE_ENV=production
+    - /bin/bash -lc 'cd $DEPLOYPATH && npm ci --no-audit --progress=false'
+    - /bin/bash -lc 'cd $DEPLOYPATH && npx prisma generate'
+    - /bin/bash -lc 'cd $DEPLOYPATH && npm run build'

@@ -1,343 +1,227 @@
 # TMD cPanel Deployment — Fast Start Talking (FST)
 
-Deploy the FST Next.js app to **TMD shared hosting** (`faststar@s3838`, `195.250.26.111`) via **cPanel Git Version Control**, without touching existing sites.
+Deploy FST to **TMD shared hosting** (`faststar@s3838`, `195.250.26.111`) via **cPanel Git Version Control** and **Setup Node.js App**. The app lives at an isolated path — **not** `public_html`.
 
 Related docs:
 
 - [TMD_SSH.md](./TMD_SSH.md) — SSH keys, PostgreSQL connectivity, tunnel workflow
 - [OWNER_SETUP.md](../OWNER_SETUP.md) — owner checklist
 - GitHub repo: [github.com/ekddigital/fst](https://github.com/ekddigital/fst) (`main` branch)
+- cPanel Git docs: [Git Version Control](https://docs.cpanel.net/cpanel/files/git-version-control/) · [Deployment guide](https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-deployment/)
 
 ---
 
-## Safety on shared hosting (read first)
+## Safety on shared hosting
 
 This cPanel account hosts **many existing sites** under `~/`:
 
 | Path / domain | Notes |
 |---------------|-------|
-| `~/public_html/` | May contain WordPress or primary site — **do not deploy FST here** |
+| `~/public_html/` | WordPress / primary site — **do not deploy FST here** |
 | `~/teacherjoe.faststarttalking.com/` | Existing subdomain site |
 | `~/jinanicf.com/` | Existing site |
-| Other domain folders | Leave untouched |
-
-**FST deploy only affects:**
-
-- A **new directory** you choose (e.g. `~/fst-app/`)
-- A **new subdomain** you create (e.g. `app.faststarttalking.com`)
-- The PostgreSQL database **`faststar_fst`** (isolated from other sites' files)
+| **`~/coding/fst/`** | **FST only** — safe, isolated clone path |
 
 | Action | Touches existing sites? |
 |--------|-------------------------|
-| Clone FST to `~/fst-app/` | **No** — new folder only |
-| Create subdomain `app.faststarttalking.com` | **No** — new vhost/docroot |
+| Clone FST to `~/coding/fst/` | **No** — new folder only |
+| Create subdomain for FST (e.g. `app.faststarttalking.com`) | **No** — new vhost |
 | `npm run db:push` / `db:seed` on `faststar_fst` | **No** — database only |
-| cPanel Git **Pull/Deploy** on FST repo | **No** — only updates FST clone path |
-| Editing `public_html` or other domain folders | **Yes** — **avoid** |
+| cPanel Git **Pull** + **Deploy HEAD Commit** | **No** — only updates `~/coding/fst/` |
 
 Never commit `secrets/`, `.env`, `.env.local`, or private keys. Create `.env` **manually on the server** after clone.
 
 ---
 
-## Recommended deploy path
+## Deploy settings (reference)
 
-**Primary recommendation:** clone to an isolated app directory and serve via **cPanel Setup Node.js App** on a **new subdomain**.
+| Setting | Value |
+|---------|-------|
+| Clone URL | `https://github.com/ekddigital/fst.git` |
+| Repository path | `/home/faststar/coding/fst` |
+| Branch | `main` |
+| Node.js app root | `coding/fst` |
+| Subdomain (example) | `app.faststarttalking.com` or `teacherjoe.faststarttalking.com` |
+| PostgreSQL database | `faststar_fst` |
+| PostgreSQL user | `faststar_tmdconnect` |
+| Server-side DB host | `127.0.0.1:5432` |
 
-| Setting | Recommended value |
-|---------|-------------------|
-| Git clone path | `/home/faststar/fst-app` |
-| Subdomain | `app.faststarttalking.com` (or `fst.faststarttalking.com`) |
-| Subdomain docroot | Point to Node.js app (cPanel sets this) or `~/fst-app` |
-| Do **not** use | `~/public_html`, `~/teacherjoe.faststarttalking.com`, or any existing site folder |
-
-**Why a new subdomain?**
-
-- Keeps WordPress and legacy sites in their current folders
-- Lets cPanel manage Node.js process, port, and reverse proxy
-- Clean DNS cutover when ready (`NEXT_PUBLIC_SITE_URL` matches subdomain)
-
-**Alternative (subfolder only, no subdomain):** deploy under `~/fst-app/` and access via a path on an existing domain only if you understand reverse-proxy rules — subdomain is simpler and safer.
+The repo is **public** on GitHub today, so HTTPS clone works without credentials. If the repo becomes **private**, add a **deploy key** in cPanel → **SSH Access → Manage SSH Keys** and use the SSH clone URL instead.
 
 ---
 
-## Prerequisites
+## Phase 1 — Clone (cPanel UI)
 
-Complete these before first deploy:
+You are doing this step now.
 
-1. **SSH access** — see [TMD_SSH.md](./TMD_SSH.md): import `tmdconnect.pub`, authorize, test `ssh tmd echo ok`
-2. **PostgreSQL database** — cPanel → **PostgreSQL Databases**:
-   - Database: `faststar_fst`
-   - User: `faststar_tmdconnect`
-   - User has **ALL PRIVILEGES** on `faststar_fst`
-3. **Node.js** — cPanel → **Setup Node.js App** (or **Application Manager**) available on your plan
-4. **GitHub repo** — [github.com/ekddigital/fst](https://github.com/ekddigital/fst) is public or deploy key configured
-
-### Connectivity snapshot (Aug 2026 dev machine tests)
-
-These results inform local vs server-side database work:
-
-| Test | Result |
-|------|--------|
-| Mac public IP | **`31.97.41.230`** — add in cPanel **Remote PostgreSQL** for direct Mac → DB |
-| `195.250.26.111:5432` from Mac | **Unreachable** (IP not whitelisted) |
-| `ssh tmd` | **`Permission denied (publickey)`** until key is authorized + loaded in agent |
-| `npm run db:push` from Mac (direct URL) | **P1001** — can't reach server |
-| Prisma / DB on **server** via `127.0.0.1:5432` | **Works** — use this for deploy-time schema sync |
-| `npx tsc --noEmit` | **Pass** |
-| `npm run build` without DB | **Fails** at page data collection (Next.js queries DB at build) |
-
-**Implication:** run `db:push`, `db:seed`, and `npm run build` **on the server** (or fix Mac connectivity first via SSH tunnel or Remote PostgreSQL).
-
----
-
-## Step 1 — Create subdomain (cPanel)
-
-1. cPanel → **Domains** → **Create A New Domain** (or **Subdomains**)
-2. Subdomain: `app.faststarttalking.com`
-3. **Document root:** use cPanel's default for the subdomain (e.g. `~/app.faststarttalking.com`) — the Node.js app will override the actual serving path
-4. Do **not** point this subdomain at `public_html` or an existing site's folder
-
-DNS: if `faststarttalking.com` DNS is already on TMD, the subdomain may auto-resolve. Otherwise add an **A record** for `app` → `195.250.26.111`.
-
----
-
-## Step 2 — Clone via cPanel Git Version Control
-
-1. cPanel → **Git Version Control**
-2. Click **Create**
-3. Fill in:
+1. cPanel → **Git Version Control** → **Create**
+2. Fill in:
 
    | Field | Value |
    |-------|-------|
    | Clone URL | `https://github.com/ekddigital/fst.git` |
-   | Repository Path | `/home/faststar/fst-app` |
+   | Repository Path | `/home/faststar/coding/fst` |
+   | Name | `fst` |
    | Branch | `main` |
 
-4. Click **Create**
-5. Confirm the repo cloned — you should see `package.json`, `prisma/`, `src/`, etc.
+3. Click **Create**
+4. Wait for the clone to finish — confirm `package.json`, `prisma/`, `src/`, and `.cpanel.yml` are present
 
-**Important:** choose `/home/faststar/fst-app` (or similar **new** path). Do not clone into `public_html` or any existing site directory.
-
-### Updating after clone (Pull / Deploy)
-
-When you push changes to GitHub from your Mac:
-
-1. cPanel → **Git Version Control**
-2. Select the `fst-app` repository
-3. Click **Pull or Deploy** (wording varies by cPanel version)
-4. Re-run build steps on the server (see [Post-pull deploy](#post-pull-deploy-on-server))
-
-Some TMD/cPanel installs support **webhook auto-deploy** (Settings → Webhook URL). Copy the URL into GitHub → repo **Settings → Webhooks** if you want push-to-deploy. Manual pull is fine to start.
+**Do not** clone into `public_html` or any existing site folder.
 
 ---
 
-## Step 3 — Create `.env` on the server (never in git)
+## Phase 2 — First-time setup on server (Terminal)
 
-SSH in or use cPanel **Terminal**:
+After clone completes, open cPanel **Terminal** or SSH (`ssh tmd`) and run:
 
 ```bash
-ssh tmd
-cd ~/fst-app
+cd ~/coding/fst
+
+# Create .env (NOT in git — never commit this file):
+# DATABASE_URL="postgresql://faststar_tmdconnect:PASSWORD@127.0.0.1:5432/faststar_fst?sslmode=disable"
+# NEXT_PUBLIC_SITE_URL="https://faststarttalking.com"
+# ADMIN_PASSWORD="choose-a-strong-password"
+
 cp .env.example .env
-nano .env   # or use cPanel File Manager
-```
+nano .env   # paste real values; URL-encode special chars in password (# → %23)
+chmod 600 .env
 
-**Server `.env` format** — PostgreSQL on localhost (no tunnel, no remote whitelist needed **on the server**):
-
-```bash
-# Production — SERVER ONLY (create manually, never commit)
-DATABASE_URL="postgresql://faststar_tmdconnect:DB_PASSWORD@127.0.0.1:5432/faststar_fst?sslmode=disable"
-
-NEXT_PUBLIC_SITE_URL="https://app.faststarttalking.com"
-
-ADMIN_PASSWORD="choose-a-strong-password"
-# ADMIN_API_KEY=""   # optional alternative to ADMIN_PASSWORD
-```
-
-Replace `DB_PASSWORD` with the password from cPanel → **PostgreSQL Databases**. URL-encode special characters (`#` → `%23`, `!` → `%21`, `@` → `%40`).
-
-Set file permissions:
-
-```bash
-chmod 600 ~/fst-app/.env
-```
-
----
-
-## Step 4 — First-time build on server
-
-From SSH (`ssh tmd`) or cPanel **Terminal**:
-
-```bash
-cd ~/fst-app
-
-# Use Node version cPanel Node.js app expects (18+ or 20+ recommended for Next.js 16)
-node -v
+node -v    # expect 18+ or 20+
 npm -v
 
 npm install
-npm run db:generate
+npx prisma generate
 npm run db:push
 npm run db:seed
 npm run build
 ```
 
-| Script | Purpose |
-|--------|---------|
-| `npm install` | Install dependencies |
-| `npm run db:generate` | `prisma generate` — client from schema |
-| `npm run db:push` | Sync Prisma schema → `faststar_fst` |
+| Command | Purpose |
+|---------|---------|
+| `npm install` | First install (use `npm ci` on later deploys — see `.cpanel.yml`) |
+| `npx prisma generate` | Generate Prisma client |
+| `npm run db:push` | Sync schema → `faststar_fst` |
 | `npm run db:seed` | Seed categories, resources, articles, assessments |
-| `npm run build` | `prisma generate && next build` — **requires working DATABASE_URL** |
+| `npm run build` | `prisma generate && next build` — **requires working `DATABASE_URL`** |
 
-Verify build output exists: `.next/` directory.
+**Why `127.0.0.1:5432` on the server?** PostgreSQL runs locally on the shared host. No Remote PostgreSQL whitelist or SSH tunnel is needed for deploy-time commands on the server.
 
-Test start (manual, before Node.js app config):
+Verify `.next/` exists after build. Optional manual smoke test:
 
 ```bash
 npm run start
-# default port 3000 — stop with Ctrl+C after smoke test
+# Ctrl+C to stop — use cPanel Node.js App for production
 ```
 
 ---
 
-## Step 5 — cPanel Setup Node.js App
+## Phase 3 — Setup Node.js App (cPanel)
 
-1. cPanel → **Setup Node.js App** (or **Application Manager**)
-2. **Create Application**
+If your plan includes **Setup Node.js App** (or **Application Manager**):
+
+1. cPanel → **Setup Node.js App** → **Create Application**
+2. Configure:
 
    | Field | Value |
    |-------|-------|
-   | Node.js version | 18.x or 20.x (latest LTS available) |
+   | Node.js version | 18.x or 20.x (LTS) |
    | Application mode | Production |
-   | Application root | `fst-app` (maps to `/home/faststar/fst-app`) |
-   | Application URL | `app.faststarttalking.com` |
-   | Application startup file | `node_modules/next/dist/bin/next` or use npm script (see below) |
+   | Application root | `coding/fst` → `/home/faststar/coding/fst` |
+   | Application URL | Subdomain, e.g. `app.faststarttalking.com` — **not** `public_html` |
+   | Startup command | `npm run start` |
 
-3. **Environment variables** — add the same values as `.env` in the cPanel UI (belt-and-suspenders; Next.js also reads `.env`):
-
-   - `DATABASE_URL`
-   - `NEXT_PUBLIC_SITE_URL`
-   - `ADMIN_PASSWORD` (and/or `ADMIN_API_KEY`)
-
-4. **Start script** — many cPanel Node setups use:
-
-   ```bash
-   npm run start
-   ```
-
-   Or directly:
+   Alternative startup (if the panel wants a file):
 
    ```bash
    node node_modules/next/dist/bin/next start -p $PORT
    ```
 
-   cPanel sets `$PORT`; if the UI asks for a startup command, use whatever matches your panel's docs.
+3. **Environment variables** — add the same values as `.env` (belt-and-suspenders):
 
-5. Click **Create** / **Save**, then **Start** / **Restart** the application
+   - `NODE_ENV=production`
+   - `DATABASE_URL`
+   - `NEXT_PUBLIC_SITE_URL`
+   - `ADMIN_PASSWORD` (and/or `ADMIN_API_KEY`)
 
-6. cPanel usually configures Apache/nginx reverse proxy from your subdomain to the Node port — no manual `.htaccess` in `public_html` needed.
+4. **Create** → **Run NPM Install** (if offered) → **Start** / **Restart**
+
+cPanel configures a reverse proxy from your subdomain to the Node port. No `.htaccess` changes in `public_html` are needed.
 
 ### Smoke test
 
-- `https://app.faststarttalking.com` — home page loads
+- Home page loads on your subdomain
 - `/programs`, `/articles` — DB-backed pages
-- `/admin/login` — admin dashboard (use `ADMIN_PASSWORD`)
+- `/admin/login` — admin dashboard
 - Contact / assessment forms submit
 
 ---
 
-## Post-pull deploy on server
+## Phase 4 — Ongoing workflow
 
-After each **Pull or Deploy** from cPanel Git:
+### Daily development (Mac)
+
+1. Work in `/Users/ekd/Documents/coding/web/andgroupco/fst`
+2. Verify locally: `npx tsc --noEmit && npm run build`
+3. Push to GitHub:
+
+   ```bash
+   git push origin main
+   ```
+
+### Deploy on TMD
+
+1. cPanel → **Git Version Control** → select `fst`
+2. **Pull or Deploy** → **Update from Remote** (pull latest `main`)
+3. **Deploy HEAD Commit** — runs `.cpanel.yml` automatically:
+
+   ```yaml
+   # .cpanel.yml (in repo root)
+   deployment:
+     tasks:
+       - export DEPLOYPATH=/home/faststar/coding/fst
+       - export NODE_ENV=production
+       - npm ci + prisma generate + npm run build (in $DEPLOYPATH)
+   ```
+
+4. cPanel → **Setup Node.js App** → **Restart** the FST application
+
+**Schema changes only:** after editing `prisma/schema.prisma`, SSH in and run `npm run db:push` before or after deploy. `.cpanel.yml` does **not** run `db:push` or `db:seed` on every deploy (by design).
+
+Optional one-liner after pull (if you skip **Deploy HEAD Commit**):
 
 ```bash
-cd ~/fst-app
-npm install
-npm run db:generate
-npm run db:push      # only if schema changed
-npm run build
+cd ~/coding/fst && npm ci && npx prisma generate && npm run build
 ```
 
-Then in cPanel → **Setup Node.js App** → **Restart** the application.
-
-Optional one-liner (after SSH in):
-
-```bash
-cd ~/fst-app && npm install && npm run db:generate && npm run db:push && npm run build
-# restart app from cPanel UI
+```mermaid
+flowchart LR
+  Mac[Mac: develop] -->|git push| GH[GitHub main]
+  GH -->|cPanel Pull| Server[~/coding/fst]
+  Server -->|Deploy HEAD Commit| Build[npm ci + build]
+  Build --> Node[cPanel Node.js App]
+  Node --> Sub[subdomain]
+  Server --> PG[(faststar_fst)]
 ```
 
 ---
 
-## Local dev + server deploy workflow
+## `.cpanel.yml` — automated deploy tasks
 
-```mermaid
-flowchart LR
-  Mac[Mac: develop locally] -->|git push| GH[GitHub main]
-  GH -->|cPanel Pull/Deploy| Server[~/fst-app on TMD]
-  Server -->|npm install + build| Node[cPanel Node.js App]
-  Node --> Sub[app.faststarttalking.com]
-  Server --> PG[(faststar_fst PostgreSQL)]
-```
+The repo includes `.cpanel.yml` at the root. cPanel runs these shell commands when you click **Deploy HEAD Commit**:
 
-### On your Mac (daily development)
+- `npm ci` — reproducible install from `package-lock.json`
+- `npx prisma generate` — refresh Prisma client after schema/pull changes
+- `npm run build` — production Next.js build
 
-1. Work in local clone: `/Users/ekd/Documents/coding/web/andgroupco/fst`
-2. Copy env: `cp .env.example .env.local`
-3. Connect to PostgreSQL (pick one — see [TMD_SSH.md](./TMD_SSH.md)):
+**Prerequisites before first Deploy HEAD Commit:**
 
-   **Option A — SSH tunnel (recommended, no cPanel firewall change):**
+- `.env` must exist on the server with a working `DATABASE_URL` (build queries the DB)
+- Node.js version on server must be 18+ (Next.js 16 requirement)
 
-   ```bash
-   # Terminal A — keep open
-   ssh -N tmd-psql
-   ```
+**After every Deploy HEAD Commit:** restart the Node.js app in cPanel.
 
-   In `.env.local`:
-
-   ```bash
-   # DEV ONLY — requires: ssh -N tmd-psql
-   DATABASE_URL="postgresql://faststar_tmdconnect:DB_PASSWORD@127.0.0.1:5433/faststar_fst?sslmode=disable"
-   ```
-
-   **Option B — Remote PostgreSQL (direct IP):**
-
-   Add **`31.97.41.230`** in cPanel → **Remote PostgreSQL**, then:
-
-   ```bash
-   DATABASE_URL="postgresql://faststar_tmdconnect:DB_PASSWORD@195.250.26.111:5432/faststar_fst?sslmode=disable"
-   ```
-
-4. Dev loop:
-
-   ```bash
-   npm install
-   npm run dev          # http://localhost:3000
-   npx tsc --noEmit && npm run build   # verify before push
-   ```
-
-5. Push to GitHub:
-
-   ```bash
-   git add …
-   git commit -m "…"
-   git push origin main
-   ```
-
-### On the server (deploy)
-
-1. cPanel → Git Version Control → **Pull or Deploy**
-2. SSH: `cd ~/fst-app && npm install && npm run db:generate && npm run db:push && npm run build`
-3. cPanel → Node.js App → **Restart**
-
-### Who uses which `DATABASE_URL`?
-
-| Environment | Host in `DATABASE_URL` | Why |
-|-------------|------------------------|-----|
-| Mac + SSH tunnel | `127.0.0.1:5433` | Tunnel forwards to server PG |
-| Mac + Remote PG | `195.250.26.111:5432` | Direct if IP whitelisted |
-| **TMD server** | **`127.0.0.1:5432`** | PostgreSQL is local on shared host |
+For static-site deploys, cPanel docs use `cp` to copy files into `public_html`. FST is a **dynamic Next.js app** — the repo path **is** the app root; build in place instead of copying.
 
 ---
 
@@ -347,81 +231,52 @@ flowchart LR
 |------|-------|
 | Database | `faststar_fst` |
 | User | `faststar_tmdconnect` |
-| Server (from Mac, if remote enabled) | `195.250.26.111:5432` |
-| Server (on TMD host) | `127.0.0.1:5432` |
-| cPanel account prefix | `faststar_` |
+| On server | `127.0.0.1:5432` |
+| From Mac (if Remote PG enabled) | `195.250.26.111:5432` |
 
-Prisma commands (from `package.json`):
-
-```bash
-npm run db:generate   # prisma generate
-npm run db:push       # prisma db push
-npm run db:seed       # npx tsx prisma/seed.ts
-```
-
-**Re-seeding:** seed uses `upsert` by slug — safe to run again after content fixes.
-
-**Schema changes:** after editing `prisma/schema.prisma`, run `db:push` on the server (or from Mac if connected), then rebuild.
-
----
-
-## Assets and `site-data/`
-
-- `site-data/` is **gitignored** — scraped locally for dev reference ([SITE_DATA.md](./SITE_DATA.md))
-- Production content lives in PostgreSQL (seed + admin dashboard)
-- Self-hosted videos: ensure `public/videos/` symlinks or assets exist on server if you rely on local files; otherwise URLs are managed in admin/seed
-
-For a minimal first deploy, seeded DB content is enough; full asset mirror is optional follow-up.
+See [TMD_SSH.md](./TMD_SSH.md) for local dev connectivity (SSH tunnel or Remote PostgreSQL).
 
 ---
 
 ## Troubleshooting
 
-### SSH `Permission denied (publickey)`
-
-See [TMD_SSH.md — Troubleshooting](./TMD_SSH.md#permission-denied-publickey). Re-authorize `tmdconnect.pub` in cPanel, then:
-
-```bash
-ssh-add --apple-use-keychain ~/.ssh/tmdconnect
-ssh tmd echo ok
-```
-
 ### `npm run build` fails with P1001
 
-Database unreachable at build time. On server, confirm `.env` uses `@127.0.0.1:5432`. From Mac, start SSH tunnel or whitelist your IP.
+Database unreachable at build time. On server, confirm `.env` uses `@127.0.0.1:5432` and the password is correct (URL-encoded).
+
+### Deploy HEAD Commit disabled or fails
+
+- Confirm `.cpanel.yml` is in the repo root on `main`
+- Working tree must be clean (no uncommitted changes on server clone)
+- Check deploy log: `~/.cpanel/logs/vc_*_git_deploy.log`
 
 ### Node.js app shows 503 / blank page
 
-- Check cPanel Node.js app logs
 - Confirm `npm run build` completed (`.next/` exists)
-- Restart the application after env changes
+- Restart the Node.js app after env or code changes
 - Verify `NEXT_PUBLIC_SITE_URL` matches the live subdomain
 
-### Git pull overwrote `.env`
+### Git pull and `.env`
 
-`.env` is gitignored and should not be in the repo. If missing after pull, recreate from `.env.example`. cPanel Git pull should not delete untracked `.env`, but keep a backup in a password manager.
+`.env` is gitignored and should persist across pulls. Keep a backup in a password manager.
 
-### Accidentally cloned to wrong path
+### Private GitHub repo
 
-Do **not** delete existing site folders. Remove only the mistaken clone directory (if empty/wrong), then re-clone to `~/fst-app`.
+Generate a deploy key in cPanel → **SSH Access**, add the public key to GitHub → repo **Settings → Deploy keys**, and switch the clone URL to `git@github.com:ekddigital/fst.git`.
 
 ---
 
 ## First deploy checklist
 
-- [ ] Subdomain `app.faststarttalking.com` created (not `public_html`)
-- [ ] Git cloned to `/home/faststar/fst-app`
+- [ ] Git cloned to `/home/faststar/coding/fst`
 - [ ] `.env` created on server (`127.0.0.1:5432`, production URL, admin password)
-- [ ] `npm install && npm run db:generate && npm run db:push && npm run db:seed && npm run build`
-- [ ] cPanel Node.js App created, env vars set, app started
+- [ ] `npm install && npx prisma generate && npm run db:push && npm run db:seed && npm run build`
+- [ ] cPanel Node.js App created for `coding/fst`, env vars set, app started
 - [ ] Smoke test: home, programs, articles, admin login, forms
-- [ ] Mac dev: SSH tunnel or Remote PG working for local Prisma
-- [ ] Push to `main` → cPanel Pull → rebuild → restart verified
+- [ ] Push to `main` → cPanel Pull → Deploy HEAD Commit → restart Node app verified
 
 ---
 
 ## Optional: Launchpad deploy (alternative)
 
-[OWNER_SETUP.md](../OWNER_SETUP.md) also documents **Launchpad** (`lpad.ekddigital.com`) as an alternative host. TMD cPanel deploy keeps app and database on the same TMD account; Launchpad is a separate path if you prefer managed Node hosting elsewhere.
-
-For TMD-native hosting, follow this doc end-to-end.
+[OWNER_SETUP.md](../OWNER_SETUP.md) also documents **Launchpad** as an alternative host. TMD cPanel deploy keeps app and database on the same TMD account.

@@ -36,16 +36,16 @@ ssh outline-vpn
 
 ## TMD Hosting — cPanel deploy (recommended for production)
 
-Deploy FST to TMD via **cPanel Git Version Control** on a **new subdomain** (e.g. `app.faststarttalking.com`) and isolated path (`~/fst-app/`). **Do not deploy to `public_html` or existing site folders.**
+Deploy FST to TMD via **cPanel Git Version Control** on a **new subdomain** (e.g. `app.faststarttalking.com`) and isolated path (`~/coding/fst/`). **Do not deploy to `public_html` or existing site folders.**
 
-Full step-by-step: **[docs/TMD_DEPLOY.md](docs/TMD_DEPLOY.md)**
+Full step-by-step (clone → `.env` → build → Node.js app → ongoing Pull/Deploy): **[docs/TMD_DEPLOY.md](docs/TMD_DEPLOY.md)**
 
-- [ ] **Create subdomain** — e.g. `app.faststarttalking.com` (new docroot, not `public_html`)
-- [ ] **Clone repo in cPanel Git** — `https://github.com/ekddigital/fst.git` → `/home/faststar/fst-app`
+- [ ] **Clone repo in cPanel Git** — `https://github.com/ekddigital/fst.git` → `/home/faststar/coding/fst` (name: `fst`)
 - [ ] **Create `.env` on server** — `DATABASE_URL` with `@127.0.0.1:5432`, `NEXT_PUBLIC_SITE_URL`, `ADMIN_PASSWORD` (never commit)
-- [ ] **First build on server** — `npm install`, `db:generate`, `db:push`, `db:seed`, `build`
-- [ ] **Setup Node.js App** in cPanel — point at `fst-app`, restart after each pull
-- [ ] **Deploy loop** — push to GitHub → cPanel Pull/Deploy → rebuild → restart Node app
+- [ ] **First build on server** — `npm install`, `prisma generate`, `db:push`, `db:seed`, `build`
+- [ ] **Create subdomain** — e.g. `app.faststarttalking.com` (new docroot, not `public_html`)
+- [ ] **Setup Node.js App** in cPanel — application root `coding/fst`, restart after each deploy
+- [ ] **Deploy loop** — push to GitHub → cPanel Pull → **Deploy HEAD Commit** (`.cpanel.yml`) → restart Node app
 
 SSH and PostgreSQL dev access: [docs/TMD_SSH.md](docs/TMD_SSH.md).
 
