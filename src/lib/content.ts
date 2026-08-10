@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { resolveFullSizeImagePath, upgradeContentImagePaths } from "@/lib/images";
 
 export type PageMetadata = {
   url: string;
@@ -77,14 +78,15 @@ function mapImageUrls(body: string, metadata?: PageMetadata): string {
   if (metadata?.assets?.images) {
     for (const img of metadata.assets.images) {
       const filename = path.basename(img.local);
-      result = result.replaceAll(img.url, `/images/${filename}`);
+      const localPath = resolveFullSizeImagePath(`/images/${filename}`);
+      result = result.replaceAll(img.url, localPath);
     }
   }
   result = result.replace(
     /https:\/\/faststarttalking\.com\/wp-content\/uploads\/[^)\s"]+/g,
     (url) => {
       const filename = decodeURIComponent(url.split("/").pop() ?? "");
-      return `/images/${filename}`;
+      return resolveFullSizeImagePath(`/images/${filename}`);
     },
   );
   result = result.replace(/https:\/\/faststarttalking\.com\/[^)\s"]+/g, (url) => {
@@ -108,7 +110,7 @@ function mapImageUrls(body: string, metadata?: PageMetadata): string {
       return url;
     }
   });
-  return result;
+  return upgradeContentImagePaths(result);
 }
 
 export async function getArchivePage(archiveSlug: string): Promise<ArchivePage | null> {
@@ -162,5 +164,5 @@ export function extractExcerpt(body: string, maxLength = 160): string {
 
 export function getArticleImage(body: string): string | undefined {
   const match = body.match(/!\[[^\]]*\]\((\/images\/[^)]+)\)/);
-  return match?.[1];
+  return match?.[1] ? resolveFullSizeImagePath(match[1]) : undefined;
 }

@@ -1,6 +1,11 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Image from "next/image";
+import { resolveFullSizeImagePath } from "@/lib/images";
+import { PdfViewer } from "@/components/content/pdf-viewer";
+import { DocumentDownloadButton } from "@/components/content/document-download-button";
+import { WordDocumentCard } from "@/components/content/word-document-card";
+import { getDocumentKind } from "@/lib/documents";
 
 type MarkdownContentProps = {
   content: string;
@@ -25,18 +30,38 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
             return <h2 className="text-2xl font-semibold">{children}</h2>;
           },
           h3: ({ children }) => <h3 className="text-xl font-semibold">{children}</h3>,
-          a: ({ href, children }) => (
-            <a href={href} className="font-medium text-primary underline-offset-4 hover:underline">
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => {
+            if (href && getDocumentKind(href) === "pdf") {
+              return (
+                <span className="my-8 block space-y-4">
+                  <PdfViewer src={href} title={String(children ?? "PDF document")} />
+                  <DocumentDownloadButton href={href} variant="outline" size="default" />
+                </span>
+              );
+            }
+            if (href && getDocumentKind(href) === "word") {
+              return (
+                <WordDocumentCard
+                  title={String(children ?? "Word document")}
+                  filePath={href}
+                  className="my-8"
+                />
+              );
+            }
+            return (
+              <a href={href} className="font-medium text-primary underline-offset-4 hover:underline">
+                {children}
+              </a>
+            );
+          },
           img: ({ src, alt }) => {
             if (!src || typeof src !== "string") return null;
             if (src.startsWith("/images/")) {
+              const fullSrc = resolveFullSizeImagePath(src);
               return (
                 <span className="my-6 block overflow-hidden rounded-xl shadow-md">
                   <Image
-                    src={src}
+                    src={fullSrc}
                     alt={alt ?? ""}
                     width={800}
                     height={500}

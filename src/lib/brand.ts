@@ -9,14 +9,14 @@ export const BRAND = {
 } as const;
 
 export const LOGO = {
-  sm: "/images/DALL_E-2025-02-06-18.14.53-A-modern-and-professional-logo-for-Fast-Start-Talking-with-the-initials-FST-as-the-main-design-element.-The-logo-should-include___-A-sleek-and-bo-1-e1739329906214-123x120.webp",
-  md: "/images/DALL_E-2025-02-06-18.14.53-A-modern-and-professional-logo-for-Fast-Start-Talking-with-the-initials-FST-as-the-main-design-element.-The-logo-should-include___-A-sleek-and-bo-1-e1739329906214-300x293.webp",
+  sm: "/images/DALL_E-2025-02-06-18.14.53-A-modern-and-professional-logo-for-Fast-Start-Talking-with-the-initials-FST-as-the-main-design-element.-The-logo-should-include___-A-sleek-and-bo-1-e1739329906214.webp",
+  md: "/images/DALL_E-2025-02-06-18.14.53-A-modern-and-professional-logo-for-Fast-Start-Talking-with-the-initials-FST-as-the-main-design-element.-The-logo-should-include___-A-sleek-and-bo-1-e1739329906214.webp",
   favicon: "/images/cropped-logo-192x192.jpg",
 } as const;
 
 export const HERO_IMAGES = {
-  home: "/images/felix-and-I-1024x651.png",
-  teacher: "/images/Weixin-Image_20260712205128_535_52-3-724x1024.jpg",
+  home: "/images/felix-and-I.png",
+  teacher: "/images/Weixin-Image_20260712205128_535_52-3.jpg",
   programs: "/images/student-teacher1.jpg",
 } as const;
 

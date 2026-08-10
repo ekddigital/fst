@@ -15,8 +15,8 @@ export function Header() {
             src={LOGO.sm}
             alt={`${BRAND.siteName} logo`}
             width={44}
-            height={44}
-            className="rounded-full ring-2 ring-primary/20"
+            height={43}
+            className="size-11 rounded-full ring-2 ring-primary/20"
             priority
           />
           <span className="hidden font-bold tracking-tight text-foreground sm:block sm:text-base lg:text-lg">

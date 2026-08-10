@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { Download, ExternalLink, FileText, Play } from "lucide-react";
+import { ExternalLink, Play } from "lucide-react";
 import type { ResourceItem } from "@/lib/data/catalog";
+import { PdfDocumentCard } from "@/components/content/pdf-document-card";
+import { WordDocumentCard } from "@/components/content/word-document-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getDocumentKind } from "@/lib/documents";
 import { cn } from "@/lib/utils";
 
 function truncate(text: string, max = 140): string {
@@ -30,50 +33,28 @@ export function ResourceCard({ resource }: { resource: ResourceItem }) {
     );
   }
 
-  if (resource.type === "GUIDE" && resource.pdfPath) {
-    return (
-      <Card className="border-primary/30 bg-primary/5">
-        <CardHeader>
-          <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Download className="size-5" aria-hidden />
-          </div>
-          <CardTitle className="text-xl">{resource.title}</CardTitle>
-          {resource.description && (
-            <CardDescription className="text-base">{truncate(resource.description)}</CardDescription>
-          )}
-        </CardHeader>
-        <CardContent>
-          <Button asChild size="lg">
-            <Link href={resource.pdfPath} target="_blank">
-              Download Parent Guide (PDF)
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
+  if ((resource.type === "GUIDE" || resource.type === "PDF") && resource.pdfPath) {
+    const kind = getDocumentKind(resource.pdfPath);
 
-  if (resource.type === "PDF" && resource.pdfPath) {
+    if (kind === "word") {
+      return (
+        <WordDocumentCard
+          title={resource.title}
+          description={resource.description}
+          filePath={resource.pdfPath}
+          className={resource.type === "GUIDE" ? "col-span-full" : undefined}
+        />
+      );
+    }
+
     return (
-      <Card className="transition-shadow hover:shadow-md">
-        <CardHeader>
-          <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <FileText className="size-5" aria-hidden />
-          </div>
-          <CardTitle className="text-xl">{resource.title}</CardTitle>
-          {resource.description && (
-            <CardDescription className="text-base">{truncate(resource.description)}</CardDescription>
-          )}
-        </CardHeader>
-        <CardContent>
-          <Button asChild variant="outline">
-            <Link href={resource.pdfPath} target="_blank">
-              <Download aria-hidden />
-              Download PDF
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
+      <PdfDocumentCard
+        title={resource.title}
+        description={resource.description}
+        pdfPath={resource.pdfPath}
+        variant={resource.type === "GUIDE" ? "guide" : "default"}
+        className={resource.type === "GUIDE" ? "col-span-full" : undefined}
+      />
     );
   }
 
@@ -81,17 +62,35 @@ export function ResourceCard({ resource }: { resource: ResourceItem }) {
     return (
       <Card className="transition-shadow hover:shadow-md">
         <CardHeader>
-          <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <FileText className="size-5" aria-hidden />
-          </div>
           <CardTitle className="text-xl">{resource.title}</CardTitle>
           {resource.description && (
             <CardDescription className="text-base">{truncate(resource.description)}</CardDescription>
           )}
         </CardHeader>
         <CardContent>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" size="lg" className="min-h-11">
             <Link href={`/articles/${resource.articleSlug}`}>Read article</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (resource.type === "EXTERNAL" && resource.externalUrl) {
+    return (
+      <Card className="transition-shadow hover:shadow-md">
+        <CardHeader>
+          <CardTitle className="text-xl">{resource.title}</CardTitle>
+          {resource.description && (
+            <CardDescription className="text-base">{truncate(resource.description)}</CardDescription>
+          )}
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline" size="lg" className="min-h-11">
+            <Link href={resource.externalUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink aria-hidden />
+              Open resource
+            </Link>
           </Button>
         </CardContent>
       </Card>
@@ -117,9 +116,6 @@ export function ResourceCard({ resource }: { resource: ResourceItem }) {
   return (
     <Card className="transition-shadow hover:shadow-md">
       <CardHeader>
-        <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <ExternalLink className="size-5" aria-hidden />
-        </div>
         <CardTitle className="text-xl">{resource.title}</CardTitle>
         {resource.description && (
           <CardDescription className="text-base">{truncate(resource.description)}</CardDescription>

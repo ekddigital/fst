@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { resolveFullSizeImagePath, upgradeContentImagePaths } from "@/lib/images";
 
 const db = new PrismaClient();
 
@@ -58,19 +59,20 @@ function mapImageUrls(body: string, metadata?: { assets?: { images?: Array<{ url
   if (metadata?.assets?.images) {
     for (const img of metadata.assets.images) {
       const filename = path.basename(img.local);
-      result = result.replaceAll(img.url, `/images/${filename}`);
+      const localPath = resolveFullSizeImagePath(`/images/${filename}`);
+      result = result.replaceAll(img.url, localPath);
     }
   }
   result = result.replace(
     /https:\/\/faststarttalking\.com\/wp-content\/uploads\/[^)\s"]+/g,
-    (url) => `/images/${decodeURIComponent(url.split("/").pop() ?? "")}`,
+    (url) => resolveFullSizeImagePath(`/images/${decodeURIComponent(url.split("/").pop() ?? "")}`),
   );
-  return result;
+  return upgradeContentImagePaths(result);
 }
 
 function getCoverImage(body: string): string | null {
   const match = body.match(/!\[[^\]]*\]\((\/images\/[^)]+)\)/);
-  return match?.[1] ?? null;
+  return match?.[1] ? resolveFullSizeImagePath(match[1]) : null;
 }
 
 async function seedArticles() {
@@ -365,6 +367,15 @@ async function seedResources() {
       type: ResourceType.GUIDE,
       pdfPath: "/other/FST_Parent_Guide_Cover_to_Page_8_Complete_Draft.pdf",
       sortOrder: 4,
+    },
+    {
+      categoryId: littleKids.id,
+      slug: "parent-guide-chinese",
+      title: "Helping Your Child Build English Skills (Chinese Version)",
+      description: "Parent guide in Chinese — practical tips for supporting English learning at home.",
+      type: ResourceType.GUIDE,
+      pdfPath: "/other/chinese-version.docx",
+      sortOrder: 5,
     },
     {
       categoryId: cambridge.id,

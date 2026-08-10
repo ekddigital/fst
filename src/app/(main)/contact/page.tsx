@@ -36,11 +36,11 @@ export default function ContactPage() {
               <CardContent>
                 <div className="inline-block overflow-hidden rounded-xl bg-white p-3 shadow-inner ring-1 ring-border/50">
                   <Image
-                    src="/images/qr-code-203x300.jpg"
+                    src="/images/qr-code.jpg"
                     alt="WeChat QR code to contact Teacher Joe"
-                    width={203}
-                    height={300}
-                    className="rounded-lg"
+                    width={280}
+                    height={408}
+                    className="h-auto w-full max-w-[280px] rounded-lg"
                   />
                 </div>
               </CardContent>
