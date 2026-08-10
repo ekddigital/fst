@@ -656,6 +656,59 @@ See [TMD_SSH.md](./TMD_SSH.md) for SSH/SFTP server access vs Remote PostgreSQL, 
 
 ## Troubleshooting
 
+### cPanel env var mistake — `DATABASE_URL=DATABASE_URL=...`
+
+If Prisma fails with a connection string that literally starts with `DATABASE_URL=` (double prefix), cPanel **Setup Node.js App → Environment Variables** has the wrong **Value**.
+
+**Symptom (shell or deploy log):**
+
+```text
+DATABASE_URL=DATABASE_URL=postgresql://faststar_tmdconnect:...@195.250.26.111:5432/...
+```
+
+**Fix in cPanel → Setup Node.js App → your FST app → Environment Variables:**
+
+| Name | Value (correct) | Wrong |
+|------|-----------------|-------|
+| `DATABASE_URL` | `postgresql://faststar_tmdconnect:YOUR_PASSWORD@127.0.0.1:5432/faststar_fst?sslmode=disable` | `DATABASE_URL=postgresql://...` or `@195.250.26.111` |
+
+- **Name** = variable name only (`DATABASE_URL`).
+- **Value** = raw URL only — no `DATABASE_URL=` prefix, no quotes.
+- On the server use **`127.0.0.1:5432`**, not `195.250.26.111`.
+
+After fixing, **Restart** the Node.js app. For Terminal seed/build, use `./scripts/tmd-deploy.sh` (reads `~/coding/fst/.env` under a clean `env -i` so polluted shell vars are ignored).
+
+### LVE fork limits — `Resource temporarily unavailable`
+
+CloudLinux LVE can block `npm run build` or `git pull` when too many processes are open (extra SSH sessions, IDE remote terminals, stuck `node`/`npm`).
+
+**Fix:**
+
+1. Close extra SSH sessions and SFTP clients connected to the account.
+2. Prefer **cPanel → Terminal** (one session) over many parallel SSH tabs.
+3. Run the deploy script from the app root:
+
+   ```bash
+   cd ~/coding/fst
+   chmod +x scripts/tmd-deploy.sh   # first time only
+   ./scripts/tmd-deploy.sh
+   ```
+
+The script activates `nodevenv`, pulls `main`, installs deps, seeds, and builds under `env -i` with vars from `~/coding/fst/.env`.
+
+### `.env` file **or** cPanel UI — not both with conflicting values
+
+Pick **one** source of truth for secrets on the server:
+
+| Approach | When to use |
+|----------|-------------|
+| **File-only** (`~/coding/fst/.env`) | **Recommended** — Terminal `db:push`, `./scripts/tmd-deploy.sh`, and Prisma all read the file |
+| **cPanel UI only** | Only if Passenger does not load `.env` at runtime on your host |
+
+**Do not** maintain the same keys in both places with different values — cPanel UI vars may override `.env` at runtime while Terminal commands read the file, causing confusing “works in Terminal but not in the app” (or vice versa).
+
+If you use file-only `.env`, **remove** duplicate keys from Setup Node.js App → Environment Variables (or leave UI empty except `NODE_ENV` if required). If you use UI-only, ensure `./scripts/tmd-deploy.sh` still has a matching `.env` for seed/build (the script reads the file).
+
 ### `bash: npm: command not found`
 
 cPanel shared hosting does not put `npm` on the default shell PATH. Fix:
