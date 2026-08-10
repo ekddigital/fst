@@ -1,6 +1,6 @@
 # TMD Hosting SSH — Fast Start Talking (FST)
 
-SSH, SFTP, and PostgreSQL access for **FST** on TMD shared hosting (`faststar@s3838`, `195.250.26.111`). Keys live in `fst/secrets/` (gitignored) and `~/.ssh/tmdconnect`.
+SSH, SFTP, and PostgreSQL access for **FST** on TMD shared hosting (`faststar@s3838`, `195.250.26.111`). Keys live in `fst/secrets/` (gitignored) and `~/.ssh/tmdconnect_nopass` (recommended for dev; no `ssh-add` required).
 
 ## Access the server from your Mac (SSH / SFTP)
 
@@ -8,7 +8,7 @@ This is **full server access** — shell, files, deploy — **not** the same as 
 
 | Method | How |
 |--------|-----|
-| **SSH shell** | Load key: `ssh-add --apple-use-keychain ~/.ssh/tmdconnect` → connect: `ssh tmd` |
+| **SSH shell** | `ssh tmd` — uses `IdentityFile ~/.ssh/tmdconnect_nopass` (no agent / passphrase) |
 | **SFTP** | Same key; host `195.250.26.111`, user `faststar`, port `22` (FileZilla, Cyberduck, etc.) |
 | **VS Code Remote SSH** | Optional — same `tmd` host alias in `~/.ssh/config` |
 
@@ -34,7 +34,7 @@ Never commit `.env`, `secrets/`, or private keys.
 | Mac public IP (`curl ifconfig.me` on **your Mac**) | Add **this** IP in cPanel **Remote PostgreSQL** — e.g. `31.97.41.230` (yours will differ) |
 | cPanel Remote DB hosts already listed | `195.250.26.108`, `195.250.26.83` — **server IPs, not your Mac** — do not add these for local dev |
 | `nc` → `195.250.26.111:5432` | **No response / unreachable** until your Mac IP is whitelisted (Remote PG) or you use an SSH tunnel |
-| `ssh tmd` (BatchMode) | **`Permission denied (publickey)`** — fix key authorize + agent (below) |
+| `ssh tmd` (BatchMode) | **`Permission denied (publickey)`** until **`tmdconnect_nopass`** is imported and **Authorized** in cPanel; then should print `connected` / `ok` without `ssh-add` |
 | SSH tunnel → `127.0.0.1:5433` | **Not up** until SSH works |
 | `npm run db:push` (direct `.env` URL) | **P1001** — can't reach `195.250.26.111:5432` without Remote PG or tunnel |
 | `npx tsc --noEmit` | **Pass** |
@@ -120,10 +120,11 @@ SSH in, use an isolated app directory (not `public_html` unless intended), run `
 
 | Artifact | Meaning |
 |----------|---------|
-| **`tmdconnect`** | SSH **key pair** name (`~/.ssh/tmdconnect`) |
+| **`tmdconnect_nopass`** | **Recommended** SSH key pair (`~/.ssh/tmdconnect_nopass`) — authorized in cPanel under this name |
+| **`tmdconnect`** | Legacy passphrase key (`~/.ssh/tmdconnect`); superseded by **`tmdconnect_nopass`** for Mac dev |
 | **`faststar`** | cPanel / SSH user; prefixes `faststar_fst`, `faststar_tmdconnect` |
 | **`faststar_tmdconnect`** | PostgreSQL DB user only — **not** an SSH login; SSH user stays **`faststar`** |
-| **`nikolatrTMD`** | Second authorized key in cPanel; no matching private key in this repo — use **`tmdconnect`** from Mac |
+| **`nikolatrTMD`** | Second authorized key in cPanel; no matching private key in this repo — use **`tmdconnect_nopass`** from Mac |
 
 ## Server
 
@@ -139,21 +140,51 @@ Passwords: cPanel → **PostgreSQL Databases** only.
 
 ## SSH setup (Mac)
 
-1. Copy `fst/secrets/tmdconnect` → `~/.ssh/tmdconnect` (`chmod 600`).
-2. cPanel → **SSH Access → Manage SSH Keys** — import `tmdconnect.pub`, **Authorize**.
-3. Load key for non-interactive use (passphrase keys):
+### Recommended: passphrase-free key (`tmdconnect_nopass`)
+
+Use a dedicated key **without** a passphrase so `ssh tmd`, SFTP, and `BatchMode` work without `ssh-add` or Keychain prompts.
+
+1. **Create the key pair** (skip if you already have `~/.ssh/tmdconnect_nopass`):
 
    ```bash
-   ssh-add --apple-use-keychain ~/.ssh/tmdconnect
+   ssh-keygen -t rsa -b 2048 -f ~/.ssh/tmdconnect_nopass -C "faststar-mac" -N ""
+   chmod 600 ~/.ssh/tmdconnect_nopass
    ```
 
-4. `~/.ssh/config` aliases:
+   Confirm fingerprint:
+
+   ```bash
+   ssh-keygen -lf ~/.ssh/tmdconnect_nopass.pub
+   # expect SHA256:asjr8XWzMNf/04/9BH6YiniK57rrxfq0Yn2AMf7ht7Q
+   ```
+
+2. **cPanel → SSH Access → Manage SSH Keys → Import Key**
+   - **Name:** `tmdconnect_nopass`
+   - Paste **only** the single `ssh-rsa …` line from `~/.ssh/tmdconnect_nopass.pub` (or `cat ~/.ssh/tmdconnect_nopass.pub`).
+   - Click **Import**, then **Manage** → **Authorize** for `tmdconnect_nopass`.
+   - Do **not** re-authorize the old **`tmdconnect`** key unless you still need the passphrase key elsewhere.
+
+3. **`~/.ssh/config`** — `Host tmd`, `tmd-mysql`, and `tmd-psql` must use:
+
+   ```
+   IdentityFile ~/.ssh/tmdconnect_nopass
+   IdentitiesOnly yes
+   ```
+
+4. **Connect** (no `ssh-add`):
+
+   ```bash
+   ssh tmd
+   ssh -o BatchMode=yes -o ConnectTimeout=15 tmd echo connected
+   ```
+
+   Aliases:
    - **`tmd`** — shell
    - **`tmd-psql`** — `LocalForward 5433 127.0.0.1:5432`
 
-```bash
-ssh -o BatchMode=yes -o ConnectTimeout=15 tmd echo connected
-```
+### Legacy: passphrase key (`tmdconnect`)
+
+Team copy under `fst/secrets/tmdconnect` (gitignored). Requires `ssh-add --apple-use-keychain ~/.ssh/tmdconnect` before non-interactive SSH. Prefer **`tmdconnect_nopass`** for day-to-day Mac dev.
 
 ## Verify PostgreSQL on server (after SSH works)
 
@@ -190,24 +221,23 @@ ssh -vvv -o BatchMode=yes tmd echo ok 2>&1 | tail -40
 
 | Log pattern | Meaning | Fix |
 |-------------|---------|-----|
-| Offering key … then **no** `Server accepts key` | Pubkey not authorized on server | Re-import **`tmdconnect.pub`** in cPanel → **Authorize** (see fingerprint below). |
-| `Server accepts key` then `Passphrase not found in the keychain` / `agent contains no identities` | Server trusts the pubkey; Mac cannot **sign** with the private key | Load the **tmdconnect** key (not `id_rsa`): `ssh-add --apple-use-keychain ~/.ssh/tmdconnect`, enter the **key passphrase** (from team secrets — not the DB password). Verify `ssh-add -l` lists `SHA256:3jaDUmNedUlYusquw5whLwxNvecKKUFIndDYdoB4u3w`. Then `ssh tmd` (omit `BatchMode` until the key is in agent/keychain). |
-| Wrong key offered | `IdentityFile` mismatch | `~/.ssh/config` **`Host tmd`** must use `User faststar` and `IdentityFile ~/.ssh/tmdconnect`. |
+| Offering key … then **no** `Server accepts key` | Pubkey not authorized on server | Import **`tmdconnect_nopass.pub`** in cPanel (name **`tmdconnect_nopass`**) → **Authorize** (see fingerprint below). |
+| `Server accepts key` then `Passphrase not found in the keychain` / `agent contains no identities` | Server trusts the pubkey; Mac cannot **sign** with the private key | You are still using the **passphrase** key **`tmdconnect`** instead of **`tmdconnect_nopass`**, or the agent has no loaded key. Fix: set `IdentityFile ~/.ssh/tmdconnect_nopass` in `~/.ssh/config`, authorize **`tmdconnect_nopass`** in cPanel, and use `ssh tmd` without `ssh-add`. (Legacy: load `tmdconnect` with `ssh-add --apple-use-keychain ~/.ssh/tmdconnect`.) |
+| Wrong key offered | `IdentityFile` mismatch | `~/.ssh/config` **`Host tmd`** (and `tmd-mysql`, `tmd-psql`) must use `User faststar` and `IdentityFile ~/.ssh/tmdconnect_nopass`. |
 
-1. Confirm pubkey fingerprint matches authorized **`tmdconnect`** key in cPanel (not necessarily **`nikolatrTMD`**):
+1. Confirm pubkey fingerprint matches authorized **`tmdconnect_nopass`** key in cPanel (not **`tmdconnect`** or **`nikolatrTMD`** unless intentional):
 
    ```bash
-   ssh-keygen -lf ~/.ssh/tmdconnect.pub
-   ssh-keygen -lf fst/secrets/tmdconnect.pub
-   # both expect SHA256:3jaDUmNedUlYusquw5whLwxNvecKKUFIndDYdoB4u3w
+   ssh-keygen -lf ~/.ssh/tmdconnect_nopass.pub
+   # expect SHA256:asjr8XWzMNf/04/9BH6YiniK57rrxfq0Yn2AMf7ht7Q
    ```
 
-2. If fingerprint differs on the Mac, copy `fst/secrets/tmdconnect` and `tmdconnect.pub` to `~/.ssh/` (`chmod 600` on the private key) and re-authorize the `.pub` in cPanel.
-3. **`nikolatrTMD`:** only helps if you have that key’s **private** half locally; this workspace has **`tmdconnect`** only under `fst/secrets/`.
+2. If cPanel still has only the old **`tmdconnect`** pubkey, import and authorize **`tmdconnect_nopass.pub`** as described in [SSH setup](#ssh-setup-mac).
+3. **`nikolatrTMD`:** only helps if you have that key’s **private** half locally; default Mac key is **`tmdconnect_nopass`**.
 4. **`HostName`** must be `195.250.26.111`, not `127.0.0.1`.
 5. **Until SSH works:** use cPanel **Terminal** (same `faststar` shell) for server commands; use SSH tunnel / Remote PG steps above for DB from Mac.
 
-**If you must rotate keys:** generate a new pair (`ssh-keygen -t rsa -b 2048 -f ~/.ssh/tmdconnect`), authorize the new `.pub` in cPanel, update team copy in `fst/secrets/` via secure channel (never commit private keys).
+**If you must rotate keys:** generate a new pair (e.g. `ssh-keygen -t rsa -b 2048 -f ~/.ssh/tmdconnect_nopass -N ""`), import and authorize the new `.pub` in cPanel as **`tmdconnect_nopass`**, update `IdentityFile` in `~/.ssh/config`. Never commit private keys.
 
 ### Can't reach `195.250.26.111:5432`
 
