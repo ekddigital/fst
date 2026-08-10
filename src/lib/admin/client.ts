@@ -31,3 +31,8 @@ export function swapIds(ids: string[], id: string, direction: "up" | "down"): st
   [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
   return next;
 }
+
+export function getArticleImageFromMarkdown(body: string): string | undefined {
+  const match = body.match(/!\[[^\]]*\]\((\/images\/[^)]+)\)/);
+  return match?.[1];
+}

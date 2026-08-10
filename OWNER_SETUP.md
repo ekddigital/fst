@@ -99,10 +99,16 @@ Without `DATABASE_URL`, the site builds and runs but contact/assessment forms re
 
 Set at least one of these in `.env.local` / Launchpad (never commit real values):
 
-- `ADMIN_PASSWORD` — sign in at `/admin/login`
+- `ADMIN_PASSWORD` — sign in at `/admin/login` to manage categories, resources, articles, assessments, and submissions
 - `ADMIN_API_KEY` — `Authorization: Bearer <key>` or `X-Admin-Api-Key` header for `/api/admin/*`
 
-Run `npm run db:seed` once after first deploy to populate resources and assessments.
+Run `npm run db:seed` once after first deploy to populate resources, assessments, and articles.
+
+**Re-seeding an existing database:** Seed uses `upsert` by slug for articles, resources, categories, and assessments — safe to run again. To apply seed changes (e.g. corrected video URLs) without wiping data:
+
+```bash
+npm run db:seed
+```
 
 ---
 
@@ -120,7 +126,7 @@ Run `npm run db:seed` once after first deploy to populate resources and assessme
 ## Assets & Archive
 
 - [ ] **Scraped site-data present locally** — `site-data/` contains `pages/`, `assets/`, `content-index.json` (gitignored; run `python scrape.py` — see [docs/SITE_DATA.md](./docs/SITE_DATA.md))
-- [ ] **Videos (optional)** — video embeds currently point to faststarttalking.com CDN; download to `site-data/assets/videos/` and update `src/lib/brand.ts` `VIDEOS` if self-hosting
+- [ ] **Videos** — self-hosted in `public/videos/` (symlink from `site-data/assets/videos/`). Resource video URLs are managed in the admin dashboard and seeded via `npm run db:seed`.
 
 ---
 
