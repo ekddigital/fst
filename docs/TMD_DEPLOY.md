@@ -173,7 +173,7 @@ Complete [Option A — SSH deploy key](#option-a--ssh-deploy-key-recommended) on
 3. Click **Create**
 4. Wait for the clone to finish — confirm `package.json`, `prisma/`, `src/`, and `.cpanel.yml` are present
 
-5. Continue with **[Post-clone checklist](#post-clone-checklist-start-here-after-clone-succeeds)** (`.env`, `npm install`, DB, build, Node.js app).
+5. Continue with **[Post-clone checklist](#post-clone-checklist-start-here-after-clone-succeeds)** — **Setup Node.js App first**, then activate the virtual env, then `.env`, `npm install`, DB, build.
 
 If you see the HTTPS username error, you used `https://github.com/...` — switch to SSH or follow [Private repo + cPanel Git](#private-repo--cpanel-git-https-error).
 
@@ -192,22 +192,89 @@ Use this when cPanel Git **Create** finished successfully — e.g. path `/home/f
 
 **PostgreSQL on the server:** Use **`127.0.0.1:5432`** in `DATABASE_URL` when running commands **on TMD** (cPanel Terminal or SSH). Do **not** use `195.250.26.111` in server-side `.env` — that IP is for connecting **from your Mac** when Remote PostgreSQL is enabled. See [Database reference](#database-reference).
 
+**Correct order:** **Setup Node.js App first** → activate virtual env → `npm install` → Prisma/DB → build → start app. On cPanel shared hosting, `npm` and `node` are **not** on the default shell PATH until you create a Node.js application (or activate its `nodevenv`).
+
 ### 1. Confirm files
 
 In cPanel **Terminal** (or `ssh tmd`):
 
 ```bash
 cd ~/coding/fst
-git rev-parse --short HEAD   # e.g. 09ec427 on main
+git rev-parse --short HEAD   # e.g. f78613f on main
 ls -la package.json prisma/schema.prisma .cpanel.yml
 ```
 
-### 2. Create `.env`, install, DB, build
+### 2. Setup Node.js App FIRST (cPanel UI — before `npm install`)
+
+On TMD, a plain SSH/cPanel Terminal session does **not** include `npm`. You must create the application in cPanel first; that provisions a per-app virtual environment under `~/nodevenv/`.
+
+1. cPanel → **Software** → **Setup Node.js App** → **Create Application**
+2. Configure:
+
+   | Field | Value |
+   |-------|-------|
+   | Node.js version | **18.x or 20.x** (LTS — required for Next.js 16) |
+   | Application mode | Production |
+   | Application root | `coding/fst` → `/home/faststar/coding/fst` |
+   | Application URL | Subdomain, e.g. `app.faststarttalking.com` — **not** `public_html` |
+   | Startup command | `npm run start` |
+
+3. Click **Create** (do **not** rely on **Run NPM Install** alone until `.env` exists — see step 3 below).
+
+After creation, cPanel shows a command to enter the virtual environment at the top of the app page. Copy it exactly from your panel; it looks like:
+
+```bash
+source /home/faststar/nodevenv/coding/fst/20/bin/activate && cd /home/faststar/coding/fst
+```
+
+The `20` segment is the Node major version you selected (e.g. `18` for Node 18.x).
+
+**Right now on s3838** — if you already pulled but `npm` fails, run these diagnostics first:
+
+```bash
+# Find node/npm (before Node.js App exists, these may be empty)
+ls -la ~/nodevenv/ 2>/dev/null
+ls /opt/cpanel/ea-nodejs*/bin/ 2>/dev/null | head
+which node npm 2>/dev/null
+node -v 2>/dev/null; npm -v 2>/dev/null
+```
+
+If `~/nodevenv/coding/fst/` does not exist yet, go back to cPanel and **Create Application** (step 2 above). If the app exists, open it in **Setup Node.js App**, copy the `source .../activate` line from the UI, then:
+
+```bash
+source /home/faststar/nodevenv/coding/fst/20/bin/activate && cd /home/faststar/coding/fst
+node -v    # expect v18.x or v20.x
+npm -v     # should work now
+```
+
+**Alternative without `source`:** call npm by full path from the virtual env (version folder may be `18` or `20`):
+
+```bash
+/home/faststar/nodevenv/coding/fst/20/bin/npm -v
+/home/faststar/nodevenv/coding/fst/20/bin/npm install
+```
+
+**System-wide cPanel Node (sometimes available):**
+
+```bash
+ls /opt/cpanel/ea-nodejs*/bin/npm
+# e.g. /opt/cpanel/ea-nodejs20/bin/npm install   # only if that path exists
+```
+
+Prefer the **nodevenv** path from your app — it matches the Node version cPanel runs in production.
+
+See also [Phase 3 — Setup Node.js App](#phase-3--setup-nodejs-app-cpanel) for env vars and startup details.
+
+### 3. Activate env, create `.env`, install, DB, build
+
+**Every new Terminal session:** run the `source .../activate` command from cPanel before any `npm`/`node` commands.
 
 Replace `YOUR_PASSWORD` and `your-admin-password` with real values. URL-encode special characters in the DB password (e.g. `#` → `%23`).
 
 ```bash
-cd ~/coding/fst
+# Paste the activate line from cPanel Setup Node.js App (adjust version if needed):
+source /home/faststar/nodevenv/coding/fst/20/bin/activate && cd /home/faststar/coding/fst
+
 cat > .env << 'EOF'
 DATABASE_URL=postgresql://faststar_tmdconnect:YOUR_PASSWORD@127.0.0.1:5432/faststar_fst
 ADMIN_PASSWORD=your-admin-password
@@ -216,6 +283,7 @@ EOF
 chmod 600 .env
 
 node -v    # expect 18+ or 20+
+npm -v
 npm install
 npx prisma generate
 npm run db:push
@@ -227,17 +295,16 @@ Optional: add `?sslmode=disable` to `DATABASE_URL` if Prisma connection errors m
 
 Equivalent using the template file: `cp .env.example .env` then `nano .env` — same three variables.
 
+In cPanel → **Setup Node.js App** → edit FST app → add the same env vars (`NODE_ENV`, `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL`, `ADMIN_PASSWORD`) → **Start** / **Restart**.
+
 | Step | If it fails |
 |------|-------------|
-| `npm install` | Node too old — use cPanel **Setup Node.js App** or `nvm` if available; need Node 18+ |
+| `bash: npm: command not found` | **Setup Node.js App** not created yet, or virtual env not activated — see [step 2](#2-setup-nodejs-app-first-cpanel-ui--before-npm-install) |
+| `npm install` | Node too old — recreate app with Node 18+ or 20+ |
 | `db:push` / `db:seed` | Wrong password, wrong host (`127.0.0.1` not `195.250.26.111`), or DB/user not created in cPanel |
 | `npm run build` | Often P1001 — DB unreachable; fix `DATABASE_URL` and ensure PostgreSQL is running locally |
 
 Verify `.next/` exists after build.
-
-### 3. Setup Node.js App (cPanel)
-
-If not done yet: cPanel → **Setup Node.js App** → **Create Application** — application root `coding/fst`, startup `npm run start`, production URL on a **subdomain** (not `public_html`). Copy the same env vars as `.env`. See [Phase 3 — Setup Node.js App](#phase-3--setup-nodejs-app-cpanel).
 
 ### 4. Ongoing deploys
 
@@ -251,10 +318,14 @@ Schema changes: SSH in and run `npm run db:push` (deploy does not run push/seed 
 
 ## Phase 2 — First-time setup on server (Terminal)
 
-After clone completes, open cPanel **Terminal** or SSH (`ssh tmd`) and run:
+After clone completes:
+
+1. **Create the Node.js app in cPanel first** — [Post-clone checklist §2](#2-setup-nodejs-app-first-cpanel-ui--before-npm-install). Without this, `npm` and `node` are not on PATH.
+2. Open cPanel **Terminal** or SSH (`ssh tmd`), **activate the virtual env**, then run:
 
 ```bash
-cd ~/coding/fst
+# Copy the exact line from cPanel → Setup Node.js App → your FST application:
+source /home/faststar/nodevenv/coding/fst/20/bin/activate && cd /home/faststar/coding/fst
 
 # Create .env (NOT in git — never commit this file):
 # DATABASE_URL="postgresql://faststar_tmdconnect:PASSWORD@127.0.0.1:5432/faststar_fst?sslmode=disable"
@@ -298,7 +369,9 @@ npm run start
 
 If your plan includes **Setup Node.js App** (or **Application Manager**):
 
-1. cPanel → **Setup Node.js App** → **Create Application**
+> **First-time deploy:** complete this **before** running `npm install` in Terminal. See [Post-clone checklist §2](#2-setup-nodejs-app-first-cpanel-ui--before-npm-install). The virtual env activation command shown in cPanel is required for every SSH/Terminal session.
+
+1. cPanel → **Software** → **Setup Node.js App** → **Create Application**
 2. Configure:
 
    | Field | Value |
@@ -322,9 +395,18 @@ If your plan includes **Setup Node.js App** (or **Application Manager**):
    - `NEXT_PUBLIC_SITE_URL`
    - `ADMIN_PASSWORD` (and/or `ADMIN_API_KEY`)
 
-4. **Create** → **Run NPM Install** (if offered) → **Start** / **Restart**
+4. **Create** → copy the **`source .../activate`** command from the app page for Terminal use
+5. After `.env` exists: **Run NPM Install** in the UI (optional) or run `npm install` in an activated Terminal session
+6. **Start** / **Restart**
 
 cPanel configures a reverse proxy from your subdomain to the Node port. No `.htaccess` changes in `public_html` are needed.
+
+**Terminal activation (each session):**
+
+```bash
+source /home/faststar/nodevenv/coding/fst/20/bin/activate && cd /home/faststar/coding/fst
+node -v && npm -v
+```
 
 ### Smoke test
 
@@ -366,10 +448,10 @@ cPanel configures a reverse proxy from your subdomain to the Node port. No `.hta
 
 **Schema changes only:** after editing `prisma/schema.prisma`, SSH in and run `npm run db:push` before or after deploy. `.cpanel.yml` does **not** run `db:push` or `db:seed` on every deploy (by design).
 
-Optional one-liner after pull (if you skip **Deploy HEAD Commit**):
+Optional one-liner after pull (if you skip **Deploy HEAD Commit**) — activate env first:
 
 ```bash
-cd ~/coding/fst && npm ci && npx prisma generate && npm run build
+source /home/faststar/nodevenv/coding/fst/20/bin/activate && cd ~/coding/fst && npm ci && npx prisma generate && npm run build
 ```
 
 ```mermaid
@@ -394,6 +476,7 @@ The repo includes `.cpanel.yml` at the root. cPanel runs these shell commands wh
 
 **Prerequisites before first Deploy HEAD Commit:**
 
+- **Setup Node.js App** created for `coding/fst` (provides `node`/`npm` via `nodevenv`)
 - `.env` must exist on the server with a working `DATABASE_URL` (build queries the DB)
 - Node.js version on server must be 18+ (Next.js 16 requirement)
 
@@ -417,6 +500,31 @@ See [TMD_SSH.md](./TMD_SSH.md) for local dev connectivity (SSH tunnel or Remote 
 ---
 
 ## Troubleshooting
+
+### `bash: npm: command not found`
+
+cPanel shared hosting does not put `npm` on the default shell PATH. Fix:
+
+1. cPanel → **Software** → **Setup Node.js App** → **Create Application** (if not done) — root `coding/fst`, Node **18** or **20**
+2. Open the app in the panel and copy the **`source .../activate`** command
+3. In Terminal:
+
+   ```bash
+   source /home/faststar/nodevenv/coding/fst/20/bin/activate && cd /home/faststar/coding/fst
+   npm -v
+   ```
+
+4. If still missing, check paths:
+
+   ```bash
+   ls -la ~/nodevenv/
+   ls /opt/cpanel/ea-nodejs*/bin/npm 2>/dev/null
+   which node npm
+   ```
+
+5. Use full path as fallback: `/home/faststar/nodevenv/coding/fst/20/bin/npm install`
+
+Re-run the activate command at the start of **every** new Terminal/SSH session.
 
 ### `npm run build` fails with P1001
 
@@ -457,9 +565,11 @@ See [Option A — SSH deploy key](#option-a--ssh-deploy-key-recommended) and [te
 ## First deploy checklist
 
 - [ ] Git cloned to `/home/faststar/coding/fst`
+- [ ] cPanel **Setup Node.js App** created for `coding/fst` (Node 18+ or 20+) **before** any `npm` commands
+- [ ] Virtual env activated in Terminal (`source ~/nodevenv/coding/fst/.../activate`)
 - [ ] `.env` created on server (`127.0.0.1:5432`, production URL, admin password)
 - [ ] `npm install && npx prisma generate && npm run db:push && npm run db:seed && npm run build`
-- [ ] cPanel Node.js App created for `coding/fst`, env vars set, app started
+- [ ] Node.js App env vars set in cPanel, app **Start** / **Restart**
 - [ ] Smoke test: home, programs, articles, admin login, forms
 - [ ] Push to `main` → cPanel Pull → Deploy HEAD Commit → restart Node app verified
 
