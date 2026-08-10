@@ -66,3 +66,16 @@ ssh -N tmd-psql
 
 - Never commit `secrets/`, private keys, or `.env` with real credentials.
 - `secrets/` and `.env` are in `fst/.gitignore`.
+
+## Troubleshooting
+
+### `Permission denied (publickey)`
+
+The client reaches `195.250.26.111` and offers `~/.ssh/tmdconnect`, but the server rejects the key until it is **authorized** in TMD:
+
+1. cPanel → **SSH Access** → **Manage SSH Keys**
+2. **Import** the public key from `fst/secrets/tmdconnect.pub` (or paste its single line)
+3. Click **Manage** → **Authorize** for that key
+4. Retry: `ssh -o BatchMode=yes -o ConnectTimeout=15 tmd echo ok`
+
+Confirm **HostName** in `~/.ssh/config` is the site A record (`dig +short faststarttalking.com`), not `127.0.0.1` or `localhost`. `LocalForward` targets `127.0.0.1:3306` on the **remote** host only.
