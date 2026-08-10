@@ -35,6 +35,9 @@ function getNavLabel(item: NavItem) {
   return item.shortLabel ?? item.label;
 }
 
+const navPillClass =
+  "inline-flex items-center whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium no-underline transition-colors";
+
 function NavLink({
   href,
   label,
@@ -55,15 +58,15 @@ function NavLink({
       href={href}
       onClick={onClick}
       className={cn(
-        "relative inline-flex items-center whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-medium no-underline transition-colors xl:px-3 xl:text-[0.95rem]",
+        navPillClass,
         active
-          ? "text-primary after:absolute after:bottom-0.5 after:left-2.5 after:right-2.5 after:h-0.5 after:rounded-full after:bg-primary"
-          : "text-foreground/75 hover:bg-muted/60 hover:text-foreground",
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "text-foreground/80 hover:bg-muted/70 hover:text-foreground",
         className,
       )}
     >
-      <span className="xl:hidden">{shortLabel ?? label}</span>
-      <span className="hidden xl:inline">{label}</span>
+      <span className="lg:hidden">{shortLabel ?? label}</span>
+      <span className="hidden lg:inline">{label}</span>
     </Link>
   );
 }
@@ -73,24 +76,25 @@ function DesktopNav() {
 
   return (
     <nav aria-label="Main navigation">
-      <ul className="flex items-center gap-0.5 xl:gap-1">
+      <ul className="flex flex-nowrap items-center gap-0.5">
         {NAV_ITEMS.map((item) =>
           "children" in item && item.children ? (
-            <li key={item.href}>
-              <DropdownMenu>
+            <li key={item.href} className="shrink-0">
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-medium transition-colors xl:px-3 xl:text-[0.95rem]",
+                      navPillClass,
+                      "gap-1 border-0 bg-transparent",
                       isProgramsActive(pathname)
-                        ? "text-primary"
-                        : "text-foreground/75 hover:bg-muted/60 hover:text-foreground",
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-foreground/80 hover:bg-muted/70 hover:text-foreground",
                     )}
                     aria-haspopup="menu"
                   >
-                    {item.label}
-                    <ChevronDown className="size-4 opacity-70" aria-hidden />
+                    Programs
+                    <ChevronDown className="size-3.5 opacity-80" aria-hidden />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-52">
@@ -111,7 +115,7 @@ function DesktopNav() {
               </DropdownMenu>
             </li>
           ) : (
-            <li key={item.href}>
+            <li key={item.href} className="shrink-0">
               <NavLink
                 href={item.href}
                 label={item.label}
@@ -138,7 +142,7 @@ function MobileNav({ onNavigate }: { onNavigate?: () => void }) {
               href={item.href}
               label={item.label}
               active={isProgramsActive(pathname)}
-              className="block w-full px-3 py-3 text-base after:hidden"
+              className="block w-full px-4 py-3 text-base"
               onClick={onNavigate}
             />
             <div className="ml-3 space-y-1 border-l-2 border-primary/20 pl-3">
@@ -166,13 +170,13 @@ function MobileNav({ onNavigate }: { onNavigate?: () => void }) {
             label={item.label}
             shortLabel={getNavLabel(item)}
             active={isNavActive(pathname, item.href)}
-            className="block w-full px-3 py-3 text-base after:hidden"
+            className="block w-full px-4 py-3 text-base"
             onClick={onNavigate}
           />
         ),
       )}
 
-      <div className="mt-4 border-t border-border pt-4 px-1">
+      <div className="mt-4 border-t border-border px-1 pt-4">
         <Button asChild className="w-full" size="lg">
           <Link href="/contact" onClick={onNavigate}>
             Book a Trial

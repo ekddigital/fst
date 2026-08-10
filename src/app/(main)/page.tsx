@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, BookOpen, Sparkles, Target, Users } from "lucide-react";
+import { ArrowRight, BookOpen, Sparkles, Target, Users, ShieldCheck, Clock, Video } from "lucide-react";
 import { PageHero } from "@/components/content/page-hero";
 import { ContentSection } from "@/components/content/content-section";
 import { ProgramCard } from "@/components/content/program-card";
@@ -29,6 +29,12 @@ const FEATURES = [
   },
 ] as const;
 
+const TRUST_SIGNALS = [
+  { icon: ShieldCheck, label: "Safe online learning environment" },
+  { icon: Clock, label: "Flexible scheduling for busy families" },
+  { icon: Video, label: "Live one-to-one lessons via video" },
+] as const;
+
 export default function HomePage() {
   return (
     <>
@@ -44,7 +50,16 @@ export default function HomePage() {
       />
 
       <ContentSection>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="mb-10 flex flex-wrap justify-center gap-6 md:gap-10">
+          {TRUST_SIGNALS.map(({ icon: Icon, label }) => (
+            <div key={label} className="flex items-center gap-2 text-muted-foreground">
+              <Icon className="size-5 shrink-0 text-primary" aria-hidden />
+              <span className="text-base font-medium">{label}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-8 md:grid-cols-2">
           <Card className="group border-primary/25 bg-gradient-to-br from-primary/10 via-primary/5 to-background shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg">
             <CardHeader>
               <div className="mb-2 flex size-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
@@ -97,10 +112,11 @@ export default function HomePage() {
             KET, PET, IELTS preparation and English Starter for young learners
           </p>
         </div>
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid gap-8 sm:grid-cols-2">
           {PROGRAMS.map((program) => (
             <ProgramCard
               key={program.slug}
+              slug={program.slug}
               title={program.title}
               summary={program.summary}
               href={`/programs/${program.slug}`}

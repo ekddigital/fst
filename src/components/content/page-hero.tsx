@@ -17,7 +17,7 @@ export function PageHero({ title, description, image, imageAlt, className, actio
   return (
     <section
       className={cn(
-        "relative overflow-hidden border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-secondary/25",
+        "hero-mesh relative overflow-hidden border-b border-border/60 bg-gradient-to-br from-primary/15 via-background to-secondary/25",
         className,
       )}
     >

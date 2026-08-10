@@ -1,9 +1,15 @@
 import type { FieldValues, UseFormReturn, Path } from "react-hook-form";
 
 type ApiErrorJson = {
-  error?: string | { message?: string; details?: { fields?: Record<string, string[]> } };
+  error?: string | { message?: string; details?: Record<string, string[]> };
   errors?: Record<string, string[]>;
 };
+
+function extractFieldErrors(json: ApiErrorJson): Record<string, string[]> | undefined {
+  if (json.errors) return json.errors;
+  if (!json.error || typeof json.error !== "object") return undefined;
+  return json.error.details;
+}
 
 export function messageFromApiJson(data: ApiErrorJson): string {
   if (typeof data.error === "string") return data.error;
@@ -14,10 +20,7 @@ export function messageFromApiJson(data: ApiErrorJson): string {
 }
 
 export function setFormFieldErrors<T extends FieldValues>(form: UseFormReturn<T>, json: ApiErrorJson) {
-  const fields =
-    json.errors ??
-    (json.error && typeof json.error === "object" ? json.error.details?.fields : undefined);
-
+  const fields = extractFieldErrors(json);
   if (!fields) return;
 
   for (const [field, messages] of Object.entries(fields)) {

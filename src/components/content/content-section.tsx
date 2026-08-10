@@ -11,7 +11,7 @@ export function ContentSection({
   narrow?: boolean;
 }) {
   return (
-    <section className={cn("py-12 md:py-16 lg:py-20", className)}>
+    <section className={cn("py-16 md:py-24", className)}>
       <Container className={narrow ? "max-w-3xl" : undefined}>{children}</Container>
     </section>
   );

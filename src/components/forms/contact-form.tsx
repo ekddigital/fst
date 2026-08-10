@@ -1,13 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Loader2, Send } from "lucide-react";
+import { CheckCircle2, Loader2, Send } from "lucide-react";
 import { contactSchema, type ContactInput } from "@/lib/validations/forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Form,
   FormControl,
@@ -20,6 +22,9 @@ import {
 import { messageFromApiJson, setFormFieldErrors } from "@/lib/forms/api-errors";
 
 export function ContactForm() {
+  const [submitState, setSubmitState] = useState<"idle" | "success" | "error">("idle");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const form = useForm<ContactInput>({
     resolver: zodResolver(contactSchema),
     defaultValues: { name: "", email: "", message: "" },
@@ -28,6 +33,9 @@ export function ContactForm() {
   const submitting = form.formState.isSubmitting;
 
   async function onSubmit(data: ContactInput) {
+    setSubmitState("idle");
+    setSubmitError(null);
+
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
@@ -37,19 +45,43 @@ export function ContactForm() {
       const json = await res.json();
       if (!res.ok) {
         setFormFieldErrors(form, json);
-        toast.error(messageFromApiJson(json));
+        const message = messageFromApiJson(json);
+        setSubmitState("error");
+        setSubmitError(message);
+        toast.error(message);
         return;
       }
+      setSubmitState("success");
       toast.success("Message sent! Teacher Joe will reply soon.");
       form.reset();
     } catch {
-      toast.error("Could not send message. Check your connection and try again.");
+      const message = "Could not send message. Check your connection and try again.";
+      setSubmitState("error");
+      setSubmitError(message);
+      toast.error(message);
     }
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        {submitState === "success" && (
+          <Alert variant="success">
+            <CheckCircle2 className="size-5" aria-hidden />
+            <AlertTitle>Message sent</AlertTitle>
+            <AlertDescription>
+              Thank you! Teacher Joe will get back to you within 1–2 business days.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {submitState === "error" && submitError && (
+          <Alert variant="destructive">
+            <AlertTitle>Could not send message</AlertTitle>
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        )}
+
         <FormField
           control={form.control}
           name="name"

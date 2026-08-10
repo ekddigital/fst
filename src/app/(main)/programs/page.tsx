@@ -23,10 +23,11 @@ export default async function ProgramsPage() {
         imageAlt="Teacher working with a student"
       />
       <ContentSection>
-        <div className="mb-10 grid gap-6 sm:grid-cols-2">
+        <div className="grid gap-8 sm:grid-cols-2">
           {PROGRAMS.map((program) => (
             <ProgramCard
               key={program.slug}
+              slug={program.slug}
               title={program.title}
               summary={program.summary}
               href={`/programs/${program.slug}`}

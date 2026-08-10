@@ -37,7 +37,6 @@ export type NavItem =
     };
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: "/", label: "Home" },
   { href: "/student-assessment", label: "Assessment", shortLabel: "Assessment" },
   { href: "/about", label: "About Joe", shortLabel: "About" },
   {

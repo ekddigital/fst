@@ -1,13 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { assessmentSchema, type AssessmentInput } from "@/lib/validations/forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Form,
   FormControl,
@@ -43,6 +45,9 @@ const SAMPLE_QUESTIONS = [
 ] as const;
 
 export function AssessmentForm() {
+  const [submitState, setSubmitState] = useState<"idle" | "success" | "error">("idle");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const form = useForm<AssessmentInput>({
     resolver: zodResolver(assessmentSchema),
     defaultValues: { studentName: "", parentEmail: "", answers: {} },
@@ -53,6 +58,9 @@ export function AssessmentForm() {
   const answersError = form.formState.errors.answers?.message;
 
   async function onSubmit(data: AssessmentInput) {
+    setSubmitState("idle");
+    setSubmitError(null);
+
     try {
       const res = await fetch("/api/assessment", {
         method: "POST",
@@ -62,13 +70,20 @@ export function AssessmentForm() {
       const json = await res.json();
       if (!res.ok) {
         setFormFieldErrors(form, json);
-        toast.error(messageFromApiJson(json));
+        const message = messageFromApiJson(json);
+        setSubmitState("error");
+        setSubmitError(message);
+        toast.error(message);
         return;
       }
+      setSubmitState("success");
       toast.success("Assessment submitted! Teacher Joe will follow up with guidance.");
       form.reset({ studentName: "", parentEmail: "", answers: {} });
     } catch {
-      toast.error("Could not submit assessment. Check your connection and try again.");
+      const message = "Could not submit assessment. Check your connection and try again.";
+      setSubmitState("error");
+      setSubmitError(message);
+      toast.error(message);
     }
   }
 
@@ -79,6 +94,23 @@ export function AssessmentForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8" noValidate>
+        {submitState === "success" && (
+          <Alert variant="success">
+            <CheckCircle2 className="size-5" aria-hidden />
+            <AlertTitle>Assessment submitted</AlertTitle>
+            <AlertDescription>
+              Thank you! Teacher Joe will review the responses and follow up with guidance for your child.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {submitState === "error" && submitError && (
+          <Alert variant="destructive">
+            <AlertTitle>Could not submit assessment</AlertTitle>
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid gap-6 md:grid-cols-2">
           <FormField
             control={form.control}
@@ -117,9 +149,9 @@ export function AssessmentForm() {
           </div>
 
           {answersError && (
-            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-base text-destructive">
-              {String(answersError)}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{String(answersError)}</AlertDescription>
+            </Alert>
           )}
 
           {SAMPLE_QUESTIONS.map((q, index) => (

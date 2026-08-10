@@ -6,24 +6,41 @@ type ApiErrorBody = {
   details?: unknown;
 };
 
-export function apiSuccess<T>(data: T, status = 200) {
-  return NextResponse.json({ success: true, data }, { status });
+function withRequestId(response: NextResponse, requestId?: string) {
+  if (requestId) {
+    response.headers.set("X-Request-Id", requestId);
+  }
+  return response;
 }
 
-export function apiError(status: number, error: ApiErrorBody) {
-  return NextResponse.json({ success: false, error }, { status });
+export function apiSuccess<T>(data: T, status = 200, requestId?: string) {
+  return withRequestId(NextResponse.json({ success: true, data }, { status }), requestId);
 }
 
-export function badRequest(message: string, details?: unknown) {
-  return apiError(400, { code: "VALIDATION_ERROR", message, details });
+export function apiError(status: number, error: ApiErrorBody, requestId?: string) {
+  return withRequestId(NextResponse.json({ success: false, error }, { status }), requestId);
 }
 
-export function serverError(message = "Something went wrong. Please try again.") {
-  return apiError(500, { code: "INTERNAL_ERROR", message });
+export function badRequest(message: string, details?: unknown, requestId?: string) {
+  return apiError(400, { code: "VALIDATION_ERROR", message, details }, requestId);
 }
 
-export function serviceUnavailable(message = "This feature is not available yet.") {
-  return apiError(503, { code: "SERVICE_UNAVAILABLE", message });
+export function serverError(message = "Something went wrong. Please try again.", requestId?: string) {
+  return apiError(500, { code: "INTERNAL_ERROR", message }, requestId);
+}
+
+export function serviceUnavailable(message = "This feature is not available yet.", requestId?: string) {
+  return apiError(503, { code: "SERVICE_UNAVAILABLE", message }, requestId);
+}
+
+export function tooManyRequests(retryAfterSec: number, requestId?: string) {
+  const response = apiError(
+    429,
+    { code: "RATE_LIMIT_EXCEEDED", message: "Too many requests. Please try again later." },
+    requestId,
+  );
+  response.headers.set("Retry-After", String(retryAfterSec));
+  return response;
 }
 
 export function resolveRequestId(incoming?: string | null): string {
