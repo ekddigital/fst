@@ -11,7 +11,11 @@ export type ContactInput = z.infer<typeof contactSchema>;
 export const assessmentSchema = z.object({
   studentName: z.string().min(1, "Student name is required").max(100).trim(),
   parentEmail: z.string().email("Please enter a valid email address").max(191).trim(),
-  answers: z.record(z.string(), z.string()),
+  answers: z
+    .record(z.string(), z.string())
+    .refine((answers) => ["q1", "q2", "q3"].every((id) => answers[id]?.trim()), {
+      message: "Please answer all sample questions before submitting",
+    }),
 });
 
 export type AssessmentInput = z.infer<typeof assessmentSchema>;

@@ -11,16 +11,16 @@ type ProgramCardProps = {
 
 export function ProgramCard({ title, summary, href }: ProgramCardProps) {
   return (
-    <Card className="flex h-full flex-col transition-colors hover:border-primary/40 hover:bg-muted/30">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{summary}</CardDescription>
+    <Card className="group flex h-full flex-col overflow-hidden border-border/80 transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg">
+      <CardHeader className="pb-3">
+        <CardTitle className="transition-colors group-hover:text-primary">{title}</CardTitle>
+        <CardDescription className="line-clamp-3">{summary}</CardDescription>
       </CardHeader>
-      <CardContent className="mt-auto">
-        <Button variant="outline" asChild className="w-full sm:w-auto">
+      <CardContent className="mt-auto pt-0">
+        <Button variant="outline" asChild className="w-full group-hover:border-primary/50 sm:w-auto">
           <Link href={href}>
             Learn more
-            <ArrowRight className="size-5" aria-hidden />
+            <ArrowRight className="size-5 transition-transform group-hover:translate-x-0.5" aria-hidden />
           </Link>
         </Button>
       </CardContent>

@@ -1,3 +1,4 @@
+import { Container } from "@/components/layout/container";
 import { cn } from "@/lib/utils";
 
 export function ContentSection({
@@ -10,8 +11,8 @@ export function ContentSection({
   narrow?: boolean;
 }) {
   return (
-    <section className={cn("px-4 py-12 md:px-6 md:py-16", className)}>
-      <div className={cn("mx-auto", narrow ? "max-w-3xl" : "max-w-4xl")}>{children}</div>
+    <section className={cn("py-12 md:py-16 lg:py-20", className)}>
+      <Container className={narrow ? "max-w-3xl" : undefined}>{children}</Container>
     </section>
   );
 }

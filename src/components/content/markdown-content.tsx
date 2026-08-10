@@ -14,9 +14,17 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
         remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => <h2 className="text-3xl font-bold">{children}</h2>,
-          h2: ({ children }) => <h2 className="text-2xl font-semibold">{children}</h2>,
+          p: ({ children }) => {
+            const text = String(children ?? "").trim();
+            if (!text || text === "Ad" || text === ".") return null;
+            return <p className="text-lg leading-relaxed text-muted-foreground">{children}</p>;
+          },
+          h2: ({ children }) => {
+            const text = String(children ?? "").trim();
+            if (!text || text === "Ad") return null;
+            return <h2 className="text-2xl font-semibold">{children}</h2>;
+          },
           h3: ({ children }) => <h3 className="text-xl font-semibold">{children}</h3>,
-          p: ({ children }) => <p className="text-lg leading-relaxed text-muted-foreground">{children}</p>,
           a: ({ href, children }) => (
             <a href={href} className="font-medium text-primary underline-offset-4 hover:underline">
               {children}

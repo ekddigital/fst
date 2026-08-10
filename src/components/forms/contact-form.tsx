@@ -1,30 +1,33 @@
 "use client";
 
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 import { contactSchema, type ContactInput } from "@/lib/validations/forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { messageFromApiJson, setFormFieldErrors } from "@/lib/forms/api-errors";
 
 export function ContactForm() {
-  const [submitting, setSubmitting] = useState(false);
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<ContactInput>({
+  const form = useForm<ContactInput>({
     resolver: zodResolver(contactSchema),
     defaultValues: { name: "", email: "", message: "" },
   });
 
+  const submitting = form.formState.isSubmitting;
+
   async function onSubmit(data: ContactInput) {
-    setSubmitting(true);
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
@@ -33,54 +36,68 @@ export function ContactForm() {
       });
       const json = await res.json();
       if (!res.ok) {
-        toast.error(json.error?.message ?? "Could not send message. Please try again.");
+        setFormFieldErrors(form, json);
+        toast.error(messageFromApiJson(json));
         return;
       }
       toast.success("Message sent! Teacher Joe will reply soon.");
-      reset();
+      form.reset();
     } catch {
       toast.error("Could not send message. Check your connection and try again.");
-    } finally {
-      setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
-      <div className="space-y-2">
-        <Label htmlFor="name">Your name</Label>
-        <Input id="name" autoComplete="name" aria-invalid={!!errors.name} {...register("name")} />
-        {errors.name && (
-          <p className="text-base text-destructive" role="alert">
-            {errors.name.message}
-          </p>
-        )}
-      </div>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Your name</FormLabel>
+              <FormControl>
+                <Input autoComplete="name" placeholder="Your full name" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <div className="space-y-2">
-        <Label htmlFor="email">Email address</Label>
-        <Input id="email" type="email" autoComplete="email" aria-invalid={!!errors.email} {...register("email")} />
-        {errors.email && (
-          <p className="text-base text-destructive" role="alert">
-            {errors.email.message}
-          </p>
-        )}
-      </div>
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email address</FormLabel>
+              <FormControl>
+                <Input type="email" autoComplete="email" placeholder="you@example.com" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <div className="space-y-2">
-        <Label htmlFor="message">Message</Label>
-        <Textarea id="message" rows={5} aria-invalid={!!errors.message} {...register("message")} />
-        {errors.message && (
-          <p className="text-base text-destructive" role="alert">
-            {errors.message.message}
-          </p>
-        )}
-      </div>
+        <FormField
+          control={form.control}
+          name="message"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Message</FormLabel>
+              <FormControl>
+                <Textarea rows={5} placeholder="Tell us about your goals or ask a question…" {...field} />
+              </FormControl>
+              <FormDescription>At least 10 characters. We typically reply within 1–2 business days.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
-        {submitting && <Loader2 className="animate-spin" aria-hidden />}
-        Send message
-      </Button>
-    </form>
+        <Button type="submit" disabled={submitting} size="lg" className="w-full sm:w-auto">
+          {submitting ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />}
+          Send message
+        </Button>
+      </form>
+    </Form>
   );
 }

@@ -27,24 +27,33 @@ export const EMAIL_BRAND = {
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://faststarttalking.com",
 } as const;
 
-export const NAV_ITEMS = [
+export type NavItem =
+  | { href: string; label: string; shortLabel?: string }
+  | {
+      href: string;
+      label: string;
+      shortLabel?: string;
+      children: ReadonlyArray<{ href: string; label: string }>;
+    };
+
+export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/", label: "Home" },
-  { href: "/student-assessment", label: "Student Assessment" },
-  { href: "/about", label: "About Teacher Joe" },
+  { href: "/student-assessment", label: "Assessment", shortLabel: "Assessment" },
+  { href: "/about", label: "About Joe", shortLabel: "About" },
   {
     href: "/programs",
     label: "Programs",
     children: [
-      { href: "/programs/ielts", label: "IELTS" },
-      { href: "/programs/pet", label: "PET" },
-      { href: "/programs/ket", label: "KET" },
+      { href: "/programs/ielts", label: "IELTS Preparation" },
+      { href: "/programs/pet", label: "PET / B1 Preliminary" },
+      { href: "/programs/ket", label: "KET / A2 Key" },
       { href: "/programs/english-starter", label: "English Starter" },
     ],
   },
-  { href: "/videos-and-resources", label: "Videos & Resources" },
+  { href: "/videos-and-resources", label: "Videos", shortLabel: "Videos" },
   { href: "/articles", label: "Articles" },
   { href: "/contact", label: "Contact" },
-] as const;
+];
 
 export const PROGRAMS = [
   {

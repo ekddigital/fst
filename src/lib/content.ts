@@ -66,6 +66,9 @@ function stripFrontMatter(raw: string): { title: string; description: string; bo
   body = body.replace(/\*\*Note:\*\* Contains Lorem ipsum placeholder text\n*/i, "");
   body = body.replace(/Lorem ipsum dolor sit amet[^.]*\./gi, "");
   body = body.replace(/## Why Choose Fast Start Talking\?\s*\n\s*## Experienced Teacher\s*\n\s*/i, "");
+  body = body.replace(/##\s*\n+\s*Ad\s*\n+/gi, "\n");
+  body = body.replace(/^Ad\s*$/gm, "");
+  body = body.replace(/^##\s*$/gm, "");
   return { title, description, body };
 }
 

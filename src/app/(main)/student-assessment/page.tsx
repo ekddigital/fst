@@ -27,7 +27,7 @@ export default async function AssessmentPage() {
           </div>
         )}
 
-        <Card className="mb-8">
+        <Card className="overflow-hidden border-border/80 shadow-md">
           <CardHeader>
             <CardTitle>Understanding the results</CardTitle>
           </CardHeader>
