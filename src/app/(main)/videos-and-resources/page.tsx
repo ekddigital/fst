@@ -24,9 +24,13 @@ export default async function VideosPage() {
       />
       <ContentSection>
         <div className="space-y-16">
-          {categories.map((category) => (
-            <ResourceCategorySection key={category.id} category={category} />
-          ))}
+          {categories.length === 0 ? (
+            <p className="text-center text-lg text-muted-foreground">
+              Resources are being prepared. Please check back soon.
+            </p>
+          ) : (
+            categories.map((category) => <ResourceCategorySection key={category.id} category={category} />)
+          )}
         </div>
 
         <div className="mt-20 border-t pt-16">

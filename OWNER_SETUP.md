@@ -90,10 +90,19 @@ cp .env.example .env.local
 After `DATABASE_URL` is set:
 
 ```bash
-npm run db:generate && npm run db:push
+npm run db:generate && npm run db:push && npm run db:seed
 ```
 
 Without `DATABASE_URL`, the site builds and runs but contact/assessment forms return a friendly unavailable message.
+
+### Admin dashboard
+
+Set at least one of these in `.env.local` / Launchpad (never commit real values):
+
+- `ADMIN_PASSWORD` — sign in at `/admin/login`
+- `ADMIN_API_KEY` — `Authorization: Bearer <key>` or `X-Admin-Api-Key` header for `/api/admin/*`
+
+Run `npm run db:seed` once after first deploy to populate resources and assessments.
 
 ---
 
@@ -118,7 +127,7 @@ Without `DATABASE_URL`, the site builds and runs but contact/assessment forms re
 ## Launchpad (Deploy)
 
 - [ ] **Create Launchpad project** — [lpad.ekddigital.com](https://lpad.ekddigital.com) → New Project — (one-time)
-- [ ] **Upload env vars** — `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL` (production URL)
+- [ ] **Upload env vars** — `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL`, `ADMIN_PASSWORD` or `ADMIN_API_KEY` (production URL)
 - [ ] **Custom domain + DNS** — point domain to Launchpad; set `NEXT_PUBLIC_SITE_URL` to production URL
 - [ ] **Database reachable from Launchpad** — ensure MySQL on outline-vpn accepts connections from Launchpad host
 - [ ] **Push to `main`** → confirm Launchpad deploy success

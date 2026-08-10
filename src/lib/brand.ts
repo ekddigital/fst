@@ -81,25 +81,3 @@ export const PROGRAMS = [
   },
 ] as const;
 
-export const VIDEOS = [
-  {
-    title: "Phonics for Young Learners",
-    description: "A simple phonics lesson to help young learners improve letter sounds, pronunciation and early reading confidence.",
-    src: "/videos/Phonics-Song-2.mp4",
-  },
-  {
-    title: "Real Online Class: Alphabet, Reading, and Phonics Practice",
-    description: "Teacher Joe helping a young learner practise alphabet sounds, reading skills, and phonics through interactive activities.",
-    src: "/videos/Felix-class.mp4",
-  },
-  {
-    title: "Real Classroom Lesson: Problem & Solution",
-    description: "An engaging classroom lesson demonstrating problem and solution language skills.",
-    src: "/videos/Candy.mp4",
-  },
-  {
-    title: "5 Daily Habits That Improve Your English",
-    description: "Practical tips for building daily English learning habits.",
-    src: "/videos/revised-final.mp4",
-  },
-] as const;

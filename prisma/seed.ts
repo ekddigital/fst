@@ -183,6 +183,7 @@ async function seedResources() {
       description:
         "Practical English learning advice, study strategies, and tips from Teacher Joe to help students improve their English skills.",
       sortOrder: 3,
+      published: true,
     },
   ] as const;
 
@@ -193,8 +194,9 @@ async function seedResources() {
         title: category.title,
         description: category.description,
         sortOrder: category.sortOrder,
+        published: true,
       },
-      create: category,
+      create: { ...category, published: true },
     });
   }
 

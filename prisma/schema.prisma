@@ -43,9 +43,13 @@ model ResourceCategory {
   title       String     @db.VarChar(255)
   description String?    @db.Text
   sortOrder   Int        @default(0)
+  published   Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @default(now()) @updatedAt
   resources   Resource[]
 
   @@index([sortOrder])
+  @@index([published])
 }
 
 model Resource {
@@ -64,6 +68,8 @@ model Resource {
   sortOrder    Int              @default(0)
   published    Boolean          @default(true)
   requestable  Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @default(now()) @updatedAt
 
   @@index([categoryId, sortOrder])
   @@index([published])
@@ -90,6 +96,8 @@ model Assessment {
   description String?                @db.Text
   targetAge   String?                @db.VarChar(64)
   published   Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @default(now()) @updatedAt
   questions   AssessmentQuestion[]
   submissions AssessmentSubmission[]
 
@@ -107,6 +115,8 @@ model AssessmentQuestion {
   options       Json?
   correctAnswer String?      @db.VarChar(512)
   points        Int          @default(1)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
 
   @@index([assessmentId, sortOrder])
 }
@@ -128,14 +138,19 @@ model AssessmentSubmission {
 }
 
 model Article {
-  id          String   @id @default(cuid())
-  slug        String   @unique @db.VarChar(191)
-  title       String   @db.VarChar(255)
-  description String?  @db.Text
-  content     String   @db.LongText
-  publishedAt DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id          String    @id @default(cuid())
+  slug        String    @unique @db.VarChar(191)
+  title       String    @db.VarChar(255)
+  description String?   @db.Text
+  content     String    @db.LongText
+  coverImage  String?   @db.VarChar(512)
+  published   Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
+  @@index([sortOrder])
+  @@index([published])
   @@index([publishedAt])
 }
