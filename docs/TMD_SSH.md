@@ -74,8 +74,8 @@ DATABASE_URL="postgresql://faststar_tmdconnect:DB_PASSWORD@195.250.26.111:5432/f
 
 URL-encode password special characters (`#` → `%23`, etc.).
 
-**Option C — Server-side only (future deploy)**  
-SSH in, use an isolated app directory (not `public_html` unless intended), run `npm run db:push` there with server-local `DATABASE_URL` (often `127.0.0.1:5432` on the host). Good for CI/deploy; not required for day-one Mac dev once A or B works.
+**Option C — Server-side only (production deploy)**  
+SSH in, use an isolated app directory (not `public_html` unless intended), run `npm run db:push` there with server-local `DATABASE_URL` (often `127.0.0.1:5432` on the host). Full cPanel Git + Node.js steps: **[TMD_DEPLOY.md](./TMD_DEPLOY.md)**.
 
 ## FST (TMD) vs FOM (VPS)
 

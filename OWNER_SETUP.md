@@ -34,9 +34,20 @@ ssh outline-vpn
 
 ---
 
-## TMD Hosting SSH (production site)
+## TMD Hosting — cPanel deploy (recommended for production)
 
-Production WordPress/site host for faststarttalking.com. Full steps: [docs/TMD_SSH.md](docs/TMD_SSH.md).
+Deploy FST to TMD via **cPanel Git Version Control** on a **new subdomain** (e.g. `app.faststarttalking.com`) and isolated path (`~/fst-app/`). **Do not deploy to `public_html` or existing site folders.**
+
+Full step-by-step: **[docs/TMD_DEPLOY.md](docs/TMD_DEPLOY.md)**
+
+- [ ] **Create subdomain** — e.g. `app.faststarttalking.com` (new docroot, not `public_html`)
+- [ ] **Clone repo in cPanel Git** — `https://github.com/ekddigital/fst.git` → `/home/faststar/fst-app`
+- [ ] **Create `.env` on server** — `DATABASE_URL` with `@127.0.0.1:5432`, `NEXT_PUBLIC_SITE_URL`, `ADMIN_PASSWORD` (never commit)
+- [ ] **First build on server** — `npm install`, `db:generate`, `db:push`, `db:seed`, `build`
+- [ ] **Setup Node.js App** in cPanel — point at `fst-app`, restart after each pull
+- [ ] **Deploy loop** — push to GitHub → cPanel Pull/Deploy → rebuild → restart Node app
+
+SSH and PostgreSQL dev access: [docs/TMD_SSH.md](docs/TMD_SSH.md).
 
 - [ ] **Authorize SSH public key in TMD panel** — import `tmdconnect.pub`, authorize for SSH user
 - [ ] **Test login** — `ssh tmd` (alias in `~/.ssh/config`)
