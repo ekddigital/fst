@@ -1,0 +1,16 @@
+# Copy to the TMD server as ~/.ssh/config (chmod 600).
+# Use after generating a deploy key and adding the public key in GitHub:
+#   repo Settings → Deploy keys → Add deploy key (read-only)
+#
+# Generate key on server (cPanel Terminal):
+#   ssh-keygen -t ed25519 -f ~/.ssh/github_fst_deploy -C "fst-cpanel-deploy" -N ""
+#   cat ~/.ssh/github_fst_deploy.pub
+# Paste into GitHub Deploy keys, then:
+#   chmod 600 ~/.ssh/github_fst_deploy
+
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/github_fst_deploy
+  IdentitiesOnly yes
+  StrictHostKeyChecking accept-new

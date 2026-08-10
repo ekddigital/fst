@@ -11,6 +11,216 @@ Related docs:
 
 ---
 
+## Private repo + cPanel Git (HTTPS error)
+
+If **Create** fails with:
+
+```text
+fatal: could not read Username for 'https://github.com': No such device or address
+```
+
+GitHub is **private** and cPanel cannot prompt for HTTPS credentials. Use **SSH + deploy key** (recommended), make the repo public, or embed a PAT in the URL (not recommended).
+
+| Option | Summary | When to use |
+|--------|---------|-------------|
+| **A — SSH deploy key** | Server key → GitHub Deploy keys; clone `git@github.com:ekddigital/fst.git` | **Recommended** — read-only, no password in UI |
+| **B — Public repo** | Settings → Change visibility → Public; keep HTTPS clone URL | Only if you accept a public codebase |
+| **C — PAT in HTTPS URL** | `https://TOKEN@github.com/ekddigital/fst.git` | Avoid — token visible in cPanel/logs |
+
+**Repo visibility:** `ekddigital/fst` is **private** (unauthenticated GitHub API returns 404; cPanel HTTPS clone fails as above). Verify anytime: `gh repo view ekddigital/fst --json visibility` (requires `gh auth login`).
+
+Official cPanel: [Set Up Access to Private Repositories](https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-set-up-access-to-private-repositories/).
+
+### Option A — SSH deploy key (recommended)
+
+**1. cPanel Terminal** (or `ssh tmd`):
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -f ~/.ssh/github_fst_deploy -C "fst-cpanel-deploy" -N ""
+cat ~/.ssh/github_fst_deploy.pub
+```
+
+**2. GitHub** → [ekddigital/fst](https://github.com/ekddigital/fst) → **Settings → Deploy keys → Add deploy key**
+
+- Title: `TMD cPanel fst`
+- Key: paste `github_fst_deploy.pub`
+- **Allow write access:** off (read-only is enough for clone/pull)
+
+**3. SSH config on server** — copy from [templates/github_fst_deploy_ssh_config.example](./templates/github_fst_deploy_ssh_config.example):
+
+```bash
+cat >> ~/.ssh/config << 'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/github_fst_deploy
+  IdentitiesOnly yes
+  StrictHostKeyChecking accept-new
+EOF
+chmod 600 ~/.ssh/config ~/.ssh/github_fst_deploy
+```
+
+**4. Test:**
+
+```bash
+ssh -T git@github.com
+# Hi ekddigital/fst! You've successfully authenticated...
+git ls-remote git@github.com:ekddigital/fst.git HEAD
+```
+
+**5. cPanel → Git Version Control**
+
+- **Create** (first time) **or** edit repository → change clone URL to SSH
+- If UI already failed on HTTPS, delete the broken repo entry or use **Clone a Repository** with SSH URL only after the test above passes
+
+| Field | Value |
+|-------|-------|
+| Clone URL | `git@github.com:ekddigital/fst.git` |
+| Repository Path | `/home/faststar/coding/fst` |
+| Name | `fst` |
+| Branch | `main` |
+
+Alternative: clone in Terminal first, then **Add Existing Repository** in cPanel (see [Immediate steps](#immediate-steps-cpanel-terminal) below).
+
+### Option B — Make repo public
+
+GitHub → **Settings → General → Danger Zone → Change repository visibility → Public**. Then cPanel **Create** with `https://github.com/ekddigital/fst.git` works without credentials. Re-evaluate if the repo should stay public.
+
+### Option C — Personal access token in clone URL
+
+Not recommended: token may appear in cPanel settings and deploy logs. Prefer Option A.
+
+### Immediate steps (cPanel Terminal)
+
+Do this **right now** if you have Terminal access and can add the deploy key to GitHub:
+
+```bash
+cd ~
+mkdir -p coding
+cd coding
+# After deploy key + ~/.ssh/config (Option A):
+git clone git@github.com:ekddigital/fst.git fst
+ls -la fst/package.json fst/.cpanel.yml
+```
+
+Then in cPanel → **Git Version Control** → **Add Existing Repository** (wording may vary):
+
+| Field | Value |
+|-------|-------|
+| Repository Path | `/home/faststar/coding/fst` |
+| Remote URL | `git@github.com:ekddigital/fst.git` |
+| Branch | `main` |
+
+Continue with [Phase 2 — First-time setup on server](#phase-2--first-time-setup-on-server-terminal).
+
+---
+
+## Private repo + cPanel Git (HTTPS error)
+
+If **Create** fails with:
+
+```text
+fatal: could not read Username for 'https://github.com': No such device or address
+```
+
+GitHub is **private** and cPanel cannot prompt for HTTPS credentials. Use **SSH + deploy key** (recommended), make the repo public, or embed a PAT in the URL (not recommended).
+
+| Option | Summary | When to use |
+|--------|---------|-------------|
+| **A — SSH deploy key** | Server key → GitHub Deploy keys; clone `git@github.com:ekddigital/fst.git` | **Recommended** — read-only, no password in UI |
+| **B — Public repo** | Settings → Change visibility → Public; keep HTTPS clone URL | Only if you accept a public codebase |
+| **C — PAT in HTTPS URL** | `https://TOKEN@github.com/ekddigital/fst.git` | Avoid — token visible in cPanel/logs |
+
+**Repo visibility:** `ekddigital/fst` is **private** (unauthenticated GitHub API returns 404; cPanel HTTPS clone fails as above). Verify anytime: `gh repo view ekddigital/fst --json visibility` (requires `gh auth login`).
+
+Official cPanel: [Set Up Access to Private Repositories](https://docs.cpanel.net/knowledge-base/web-services/guide-to-git-set-up-access-to-private-repositories/).
+
+### Option A — SSH deploy key (recommended)
+
+**1. cPanel Terminal** (or `ssh tmd`):
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -f ~/.ssh/github_fst_deploy -C "fst-cpanel-deploy" -N ""
+cat ~/.ssh/github_fst_deploy.pub
+```
+
+**2. GitHub** → [ekddigital/fst](https://github.com/ekddigital/fst) → **Settings → Deploy keys → Add deploy key**
+
+- Title: `TMD cPanel fst`
+- Key: paste `github_fst_deploy.pub`
+- **Allow write access:** off (read-only is enough for clone/pull)
+
+**3. SSH config on server** — copy from [templates/github_fst_deploy_ssh_config.example](./templates/github_fst_deploy_ssh_config.example):
+
+```bash
+cat >> ~/.ssh/config << 'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/github_fst_deploy
+  IdentitiesOnly yes
+  StrictHostKeyChecking accept-new
+EOF
+chmod 600 ~/.ssh/config ~/.ssh/github_fst_deploy
+```
+
+**4. Test:**
+
+```bash
+ssh -T git@github.com
+# Hi ekddigital/fst! You've successfully authenticated...
+git ls-remote git@github.com:ekddigital/fst.git HEAD
+```
+
+**5. cPanel → Git Version Control**
+
+- **Create** (first time) **or** edit repository → change clone URL to SSH
+- If UI already failed on HTTPS, delete the broken repo entry or use **Clone a Repository** with SSH URL only after the test above passes
+
+| Field | Value |
+|-------|-------|
+| Clone URL | `git@github.com:ekddigital/fst.git` |
+| Repository Path | `/home/faststar/coding/fst` |
+| Name | `fst` |
+| Branch | `main` |
+
+Alternative: clone in Terminal first, then **Add Existing Repository** in cPanel (see [Immediate steps](#immediate-steps-cpanel-terminal) below).
+
+### Option B — Make repo public
+
+GitHub → **Settings → General → Danger Zone → Change repository visibility → Public**. Then cPanel **Create** with `https://github.com/ekddigital/fst.git` works without credentials. Re-evaluate if the repo should stay public.
+
+### Option C — Personal access token in clone URL
+
+Not recommended: token may appear in cPanel settings and deploy logs. Prefer Option A.
+
+### Immediate steps (cPanel Terminal)
+
+Do this **right now** if you have Terminal access and can add the deploy key to GitHub:
+
+```bash
+cd ~
+mkdir -p coding
+cd coding
+# After deploy key + ~/.ssh/config (Option A):
+git clone git@github.com:ekddigital/fst.git fst
+ls -la fst/package.json fst/.cpanel.yml
+```
+
+Then in cPanel → **Git Version Control** → **Add Existing Repository** (wording may vary):
+
+| Field | Value |
+|-------|-------|
+| Repository Path | `/home/faststar/coding/fst` |
+| Remote URL | `git@github.com:ekddigital/fst.git` |
+| Branch | `main` |
+
+Continue with [Phase 2 — First-time setup on server](#phase-2--first-time-setup-on-server-terminal).
+
+---
+
 ## Safety on shared hosting
 
 This cPanel account hosts **many existing sites** under `~/`:
@@ -37,7 +247,8 @@ Never commit `secrets/`, `.env`, `.env.local`, or private keys. Create `.env` **
 
 | Setting | Value |
 |---------|-------|
-| Clone URL | `https://github.com/ekddigital/fst.git` |
+| Clone URL (private repo) | `git@github.com:ekddigital/fst.git` |
+| Clone URL (if repo public) | `https://github.com/ekddigital/fst.git` |
 | Repository path | `/home/faststar/coding/fst` |
 | Branch | `main` |
 | Node.js app root | `coding/fst` |
@@ -46,26 +257,28 @@ Never commit `secrets/`, `.env`, `.env.local`, or private keys. Create `.env` **
 | PostgreSQL user | `faststar_tmdconnect` |
 | Server-side DB host | `127.0.0.1:5432` |
 
-The repo is **public** on GitHub today, so HTTPS clone works without credentials. If the repo becomes **private**, add a **deploy key** in cPanel → **SSH Access → Manage SSH Keys** and use the SSH clone URL instead.
+The repo is **private**. Use **SSH + deploy key** ([Option A](#option-a--ssh-deploy-key-recommended)); HTTPS without credentials will fail in cPanel.
 
 ---
 
 ## Phase 1 — Clone (cPanel UI)
 
-You are doing this step now.
+Complete [Option A — SSH deploy key](#option-a--ssh-deploy-key-recommended) on the server before using the SSH URL below.
 
-1. cPanel → **Git Version Control** → **Create**
+1. cPanel → **Git Version Control** → **Create** (or **Add Existing Repository** if you cloned via Terminal)
 2. Fill in:
 
    | Field | Value |
    |-------|-------|
-   | Clone URL | `https://github.com/ekddigital/fst.git` |
+   | Clone URL | `git@github.com:ekddigital/fst.git` |
    | Repository Path | `/home/faststar/coding/fst` |
    | Name | `fst` |
    | Branch | `main` |
 
 3. Click **Create**
 4. Wait for the clone to finish — confirm `package.json`, `prisma/`, `src/`, and `.cpanel.yml` are present
+
+If you see the HTTPS username error, you used `https://github.com/...` — switch to SSH or follow [Private repo + cPanel Git](#private-repo--cpanel-git-https-error).
 
 **Do not** clone into `public_html` or any existing site folder.
 
@@ -260,9 +473,19 @@ Database unreachable at build time. On server, confirm `.env` uses `@127.0.0.1:5
 
 `.env` is gitignored and should persist across pulls. Keep a backup in a password manager.
 
-### Private GitHub repo
+### `could not read Username for 'https://github.com'`
 
-Generate a deploy key in cPanel → **SSH Access**, add the public key to GitHub → repo **Settings → Deploy keys**, and switch the clone URL to `git@github.com:ekddigital/fst.git`.
+Private repo + HTTPS clone. Full steps: [Private repo + cPanel Git](#private-repo--cpanel-git-https-error). Retry cPanel with Clone URL `git@github.com:ekddigital/fst.git` after deploy key + `~/.ssh/config`.
+
+### `Permission denied (publickey)` when cloning via SSH
+
+- Confirm deploy key is added under GitHub **Deploy keys** (not only cPanel **Authorized Keys** for shell login — both can coexist)
+- `chmod 600 ~/.ssh/github_fst_deploy ~/.ssh/config`
+- Test: `ssh -T git@github.com` and `git ls-remote git@github.com:ekddigital/fst.git HEAD`
+
+### Private GitHub repo (summary)
+
+See [Option A — SSH deploy key](#option-a--ssh-deploy-key-recommended) and [templates/github_fst_deploy_ssh_config.example](./templates/github_fst_deploy_ssh_config.example).
 
 ---
 
