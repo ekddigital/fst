@@ -213,7 +213,7 @@ On TMD, a plain SSH/cPanel Terminal session does **not** include `npm`. You must
 
    | Field | Value |
    |-------|-------|
-   | Node.js version | **18.x or 20.x** (LTS — required for Next.js 16) |
+   | Node.js version | **Highest available 18.x or 20.x (LTS)** — required for Next.js 16. **Do not** use Node 10 or other old versions. |
    | Application mode | Production |
    | Application root | `coding/fst` → `/home/faststar/coding/fst` |
    | Application URL | Subdomain, e.g. `app.faststarttalking.com` — **not** `public_html` |
@@ -265,9 +265,60 @@ Prefer the **nodevenv** path from your app — it matches the Node version cPane
 
 See also [Phase 3 — Setup Node.js App](#phase-3--setup-nodejs-app-cpanel) for env vars and startup details.
 
+### Make Node available globally (your account)
+
+After you create the Node.js application for `coding/fst` with **Node 18 or 20**, cPanel puts `node` and `npm` in a per-app virtual environment. By default, **every new Terminal session** only has those tools if you run `source .../activate` first. To use `node` and `npm` in **any** new shell without activating each time, prepend the virtualenv `bin` directory to your account `PATH`.
+
+1. Confirm the `nodevenv` path — it matches the Node major version you chose in **Setup Node.js App** (Node.js Selector). Typical path:
+
+   ```text
+   /home/faststar/nodevenv/coding/fst/20/bin
+   ```
+
+   If you picked Node 18.x, the folder is often `.../18/bin` instead of `.../20/bin`. Copy the path from cPanel → **Setup Node.js App** → your FST app (same directory as the `activate` script).
+
+2. Add to `~/.bashrc` (cPanel Terminal or `ssh tmd`):
+
+   ```bash
+   # Node.js for FST (cPanel Node.js Selector)
+   export PATH="/home/faststar/nodevenv/coding/fst/20/bin:$PATH"
+   ```
+
+   Adjust `20` → `18` if that is what your app uses.
+
+3. Reload your shell config:
+
+   ```bash
+   source ~/.bashrc
+   ```
+
+4. Open a **new** Terminal tab (or SSH session) and verify:
+
+   ```bash
+   node -v   # v18.x or v20.x
+   npm -v
+   ```
+
+   `npm -v` should work without running `source .../activate`.
+
+**Node.js Selector — form values (create / edit application)**
+
+| Field | Value |
+|-------|-------|
+| Node.js version | **Highest available 18.x or 20.x (LTS)** — required for Next.js 16. **Do not** pick Node 10 or other legacy versions; they will not run this app. |
+| Application mode | Production |
+| Application root | `coding/fst` → `/home/faststar/coding/fst` |
+| Application URL | Subdomain, e.g. `app.faststarttalking.com` — **not** `public_html` |
+| Startup command | `npm run start` |
+
+**Why not “true” global Node?** On **shared hosting** you do not have root. Installing Node system-wide for all users requires a VPS or root access. Prepending your app’s `nodevenv` `bin` to `PATH` in `~/.bashrc` is the **standard cPanel approach** for account-level “global” Node in every terminal.
+
+**Alternative (optional, advanced):** Install [nvm](https://github.com/nvm-sh/nvm) in your home directory (`~/.nvm`) and use it for interactive development. Production should still use the **Setup Node.js App** / `nodevenv` version cPanel runs for the FST application so dev and deploy stay aligned.
+
+
 ### 3. Activate env, create `.env`, install, DB, build
 
-**Every new Terminal session:** run the `source .../activate` command from cPanel before any `npm`/`node` commands.
+**Every new Terminal session:** run the `source .../activate` command from cPanel before any `npm`/`node` commands — unless you added the `nodevenv` `bin` directory to `PATH` in [~/.bashrc](#make-node-available-globally-your-account).
 
 Replace `YOUR_PASSWORD` and `your-admin-password` with real values. URL-encode special characters in the DB password (e.g. `#` → `%23`).
 
@@ -376,7 +427,7 @@ If your plan includes **Setup Node.js App** (or **Application Manager**):
 
    | Field | Value |
    |-------|-------|
-   | Node.js version | 18.x or 20.x (LTS) |
+   | Node.js version | **Highest available 18.x or 20.x (LTS)** — **not** Node 10 or legacy versions |
    | Application mode | Production |
    | Application root | `coding/fst` → `/home/faststar/coding/fst` |
    | Application URL | Subdomain, e.g. `app.faststarttalking.com` — **not** `public_html` |
