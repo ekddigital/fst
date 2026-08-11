@@ -1,14 +1,14 @@
-# Verify on every push/PR; deploy to TMD on push to main via cPanel Git webhook.
+# Verify on every push/PR; deploy to TMD on push to main.
 #
-# Setup (one-time):
-#   1. cPanel → Git Version Control → Manage (fst) → Pull or Deploy → copy Webhook URL
-#   2. GitHub → Settings → Secrets and variables → Actions → New repository secret:
-#        CPANEL_DEPLOY_WEBHOOK_URL = <full webhook URL from step 1 — not a separate token;
-#        the URL itself includes the auth hash as a query parameter>
-#   3. Do NOT also add the same URL under GitHub → Webhooks (would double-deploy).
+# Deploy methods (first match wins):
+#   1. SSH (recommended) — TMD_SSH_PRIVATE_KEY + TMD_SSH_HOST + TMD_SSH_USER
+#      Bypasses cPanel webhook / dirty-tree / "Deploy HEAD Commit" issues.
+#   2. cPanel webhook (fallback) — CPANEL_DEPLOY_WEBHOOK_URL
+#      Copy from cPanel Git → Manage → Pull or Deploy → Webhook URL
+#      (NOT a cPanel login URL with cpsess).
 #
 # Server-side: repo at ~/coding/fst, .env on server, SSH deploy key in cPanel Git.
-# Deploy runs scripts/tmd-deploy.sh via .cpanel.yml. Restart Node.js app in cPanel after deploy.
+# After deploy: restart Node.js app in cPanel (Passenger limitation).
 # Full guide: docs/TMD_DEPLOY.md
 
 name: Deploy
@@ -45,15 +45,50 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger cPanel deploy webhook
+      - name: Determine deploy method
+        id: method
+        env:
+          SSH_KEY: ${{ secrets.TMD_SSH_PRIVATE_KEY }}
+          WEBHOOK_URL: ${{ secrets.CPANEL_DEPLOY_WEBHOOK_URL }}
+        run: |
+          if [ -n "$SSH_KEY" ]; then
+            echo "method=ssh" >> "$GITHUB_OUTPUT"
+          elif [ -n "$WEBHOOK_URL" ]; then
+            echo "method=webhook" >> "$GITHUB_OUTPUT"
+          else
+            echo "method=skip" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy via SSH
+        if: steps.method.outputs.method == 'ssh'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.TMD_SSH_HOST }}
+          username: ${{ secrets.TMD_SSH_USER }}
+          key: ${{ secrets.TMD_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.TMD_SSH_PORT || 22 }}
+          script: |
+            cd /home/faststar/coding/fst
+            git fetch origin main
+            git reset --hard origin/main
+            TMD_SKIP_GIT_PULL=1 TMD_SKIP_SEED=1 bash scripts/tmd-deploy.sh
+
+      - name: Deploy via cPanel webhook (fallback)
+        if: steps.method.outputs.method == 'webhook'
         env:
           WEBHOOK_URL: ${{ secrets.CPANEL_DEPLOY_WEBHOOK_URL }}
         run: |
-          if [ -z "$WEBHOOK_URL" ]; then
-            echo "::warning::CPANEL_DEPLOY_WEBHOOK_URL is not set — skipping deploy."
-            echo "Add the cPanel Git webhook URL as a repository secret to enable auto-deploy."
-            echo "See docs/TMD_DEPLOY.md § Automatic deploy on GitHub push."
-            exit 0
+          if echo "$WEBHOOK_URL" | grep -q 'cpsess'; then
+            echo "::warning::CPANEL_DEPLOY_WEBHOOK_URL looks like a cPanel login URL (contains cpsess), not a Git deploy webhook."
+            echo "Remove this secret and use SSH deploy instead (TMD_SSH_* secrets). See docs/TMD_DEPLOY.md § GitHub Actions SSH deploy."
           fi
           curl -fsS -X POST "$WEBHOOK_URL"
           echo "cPanel deploy webhook triggered successfully."
+
+      - name: Skip deploy (no secrets configured)
+        if: steps.method.outputs.method == 'skip'
+        run: |
+          echo "::warning::No deploy secrets configured — skipping deploy."
+          echo "Add TMD_SSH_PRIVATE_KEY (+ TMD_SSH_HOST, TMD_SSH_USER) for SSH deploy (recommended),"
+          echo "or CPANEL_DEPLOY_WEBHOOK_URL for cPanel webhook fallback."
+          echo "See docs/TMD_DEPLOY.md § GitHub Actions SSH deploy."

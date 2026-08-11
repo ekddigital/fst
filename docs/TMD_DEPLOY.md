@@ -360,7 +360,11 @@ Verify `.next/` exists after build.
 
 On your Mac: develop → `npx tsc --noEmit && npm run build` → `git push origin main`.
 
-On TMD: cPanel → **Git Version Control** → `fst` → **Update from Remote** → **Deploy HEAD Commit** → **Setup Node.js App** → **Restart**.
+**Recommended:** GitHub Actions SSH deploy runs automatically after CI passes — no manual git clean or cPanel **Deploy HEAD Commit** needed. See [GitHub Actions SSH deploy](#github-actions-ssh-deploy-recommended).
+
+After each deploy: cPanel → **Setup Node.js App** → **Restart**.
+
+**Manual fallback:** cPanel → **Git Version Control** → `fst` → **Update from Remote** → **Deploy HEAD Commit** → restart Node app (requires clean working tree).
 
 **Zero-downtime:** `scripts/tmd-deploy.sh` builds in `~/coding/fst-releases/<timestamp>/` and only swaps `.next` + `node_modules` into the live app after `BUILD_OK`. The previous release keeps serving during `npm ci` and `next build` (no 503 from in-place install). See [Zero-downtime deploy](#zero-downtime-deploy-blue-green).
 
@@ -589,7 +593,7 @@ FST on shared cPanel does **not** have Launchpad-style remote env API; SSH file 
 3. **Deploy HEAD Commit** — runs `.cpanel.yml` → `scripts/tmd-deploy.sh` (see below)
 4. cPanel → **Setup Node.js App** → **Restart** the FST application
 
-**Automatic deploy on push:** once the [GitHub webhook](#automatic-deploy-on-github-push) is configured, steps 2–3 run without opening cPanel. You still **Restart** the Node.js app after each deploy (cPanel does not restart Passenger from `.cpanel.yml`).
+**Automatic deploy on push:** configure [GitHub Actions SSH deploy](#github-actions-ssh-deploy-recommended) (recommended) or the [cPanel webhook fallback](#automatic-deploy-on-github-push-cpanel-webhook-fallback). You still **Restart** the Node.js app after each deploy (cPanel does not restart Passenger from `.cpanel.yml`).
 
 **Schema changes only:** after editing `prisma/schema.prisma`, SSH in and run `npm run db:push` before or after deploy. `.cpanel.yml` does **not** run `db:push` or `db:seed` on every deploy (by design).
 
@@ -602,9 +606,10 @@ source /home/faststar/nodevenv/coding/fst/22/bin/activate && cd ~/coding/fst && 
 ```mermaid
 flowchart LR
   Mac[Mac: develop] -->|git push| GH[GitHub main]
-  GH -->|webhook| CP[cPanel Git pull + deploy]
-  CP --> Live[~/coding/fst live]
-  CP --> Staging[~/coding/fst-releases/TIMESTAMP]
+  GH -->|CI verify| Actions[GitHub Actions]
+  Actions -->|SSH deploy| TMD[TMD: git reset + tmd-deploy.sh]
+  TMD --> Live[~/coding/fst live]
+  TMD --> Staging[~/coding/fst-releases/TIMESTAMP]
   Staging -->|npm ci + build| Build[BUILD_OK]
   Build -->|atomic swap| Live
   Live --> Node[cPanel Node.js App restart]
@@ -688,9 +693,84 @@ tail -f ~/fst-deploy.log
 
 ---
 
-## Automatic deploy on GitHub push
+## GitHub Actions SSH deploy (recommended)
 
-cPanel **Git Version Control** can pull from GitHub and run **Deploy HEAD Commit** (`.cpanel.yml`) when it receives a webhook. One push to `main` replaces manual **Update from Remote** + **Deploy HEAD Commit**.
+Use this when cPanel **Deploy HEAD Commit** stays disabled (dirty working tree), cPanel does not show a Git webhook URL, or you accidentally pasted a cPanel login URL (`cpsess`) into GitHub Secrets.
+
+On push to `main`, after CI verify passes, GitHub Actions SSHs to TMD, runs `git reset --hard origin/main` (fixes dirty tree automatically), then `scripts/tmd-deploy.sh`. No cPanel webhook or manual git clean needed for routine deploys.
+
+### One-time setup
+
+**1. Generate a deploy key** (on your Mac — do not commit the private key):
+
+```bash
+ssh-keygen -t ed25519 -f github_actions_fst -N ""
+```
+
+**2. Authorize the public key on TMD**
+
+cPanel → **Security** → **SSH Access** → **Manage SSH Keys**:
+
+1. **Import Key** — paste contents of `github_actions_fst.pub`
+2. **Manage** → **Authorize** for SSH user `faststar`
+
+This key is for **GitHub Actions → TMD shell login**, separate from the GitHub deploy key used for `git pull` on the server.
+
+**3. Add GitHub Actions secrets**
+
+GitHub → [ekddigital/fst](https://github.com/ekddigital/fst) → **Settings** → **Secrets and variables** → **Actions**:
+
+| Secret | Value |
+|--------|-------|
+| `TMD_SSH_PRIVATE_KEY` | Full contents of `github_actions_fst` (private key) |
+| `TMD_SSH_HOST` | `195.250.26.111` or `faststarttalking.com` |
+| `TMD_SSH_USER` | `faststar` |
+| `TMD_SSH_PORT` | Optional — default `22` |
+
+**4. Remove wrong webhook secret (if present)**
+
+If `CPANEL_DEPLOY_WEBHOOK_URL` contains `cpsess`, it is a cPanel **login** URL, not a Git deploy webhook. Delete that secret — SSH deploy takes priority when `TMD_SSH_PRIVATE_KEY` is set.
+
+**5. Verify**
+
+```bash
+git push origin main
+```
+
+GitHub → **Actions** → **Deploy** workflow → confirm SSH deploy step succeeds.
+
+Check server log: `~/coding/fst-releases/deploy-*.log` for `BUILD_OK`.
+
+**6. Restart Node.js app**
+
+cPanel → **Setup Node.js App** → **Restart** — required after every deploy (Passenger does not auto-restart from the deploy script).
+
+### What the SSH deploy runs
+
+From [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml):
+
+```bash
+cd /home/faststar/coding/fst
+git fetch origin main
+git reset --hard origin/main
+TMD_SKIP_GIT_PULL=1 TMD_SKIP_SEED=1 bash scripts/tmd-deploy.sh
+```
+
+- `git reset --hard` discards local changes on the server clone — fixes dirty tree without manual cleanup
+- `TMD_SKIP_GIT_PULL=1` — git sync already done by SSH step
+- `TMD_SKIP_SEED=1` — routine deploys skip re-seeding
+
+`scripts/tmd-deploy.sh` also resets dirty trees when run manually without `TMD_SKIP_GIT_PULL`.
+
+### Limitations
+
+Same as [cPanel webhook deploy](#limitations-on-tmd-shared-hosting): no automatic Passenger restart, LVE limits, `.env` not in git, no `db:push` on deploy.
+
+---
+
+## Automatic deploy on GitHub push (cPanel webhook fallback)
+
+cPanel **Git Version Control** can pull from GitHub and run **Deploy HEAD Commit** (`.cpanel.yml`) when it receives a webhook. This is a **fallback** when SSH deploy secrets are not configured — prefer [GitHub Actions SSH deploy](#github-actions-ssh-deploy-recommended) when cPanel does not expose a webhook URL or **Deploy HEAD Commit** is disabled due to a dirty working tree.
 
 > **Do not put the webhook URL in `.env`.** `CPANEL_DEPLOY_WEBHOOK_URL` is a **GitHub Actions repository secret** only (see [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml)). Local `.env` and server `~/coding/fst/.env` are for runtime app vars (`DATABASE_URL`, `ADMIN_PASSWORD`, `NEXT_PUBLIC_SITE_URL`) — see [`.env.example`](../.env.example). Paste the cPanel **Webhook URL** from **Pull or Deploy** (not a cPanel dashboard/login URL with `cpsess`).
 
@@ -925,8 +1005,9 @@ Database unreachable at build time. On server, confirm `.env` uses `@127.0.0.1:5
 
 ### Deploy HEAD Commit disabled or fails
 
+- **Dirty working tree:** use [GitHub Actions SSH deploy](#github-actions-ssh-deploy-recommended) — `git reset --hard origin/main` runs automatically; no manual clean needed
+- Manual fix: `cd ~/coding/fst && git fetch origin main && git reset --hard origin/main`
 - Confirm `.cpanel.yml` is in the repo root on `main`
-- Working tree must be clean (no uncommitted changes on server clone)
 - Check deploy log: `~/.cpanel/logs/vc_*_git_deploy.log`
 
 ### Node.js app shows 503 / blank page

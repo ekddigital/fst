@@ -45,8 +45,18 @@ Full step-by-step (clone → `.env` → build → Node.js app → ongoing Pull/D
 - [ ] **First build on server** — `npm install`, `prisma generate`, `db:push`, `db:seed`, `build`
 - [ ] **Create subdomain** — e.g. `app.faststarttalking.com` (new docroot, not `public_html`)
 - [ ] **Setup Node.js App** in cPanel — application root `coding/fst`, restart after each deploy
-- [ ] **Deploy loop** — push to GitHub → cPanel Pull → **Deploy HEAD Commit** (`.cpanel.yml`) → restart Node app
-- [ ] **Auto-deploy webhook** — cPanel Git → Manage → Pull or Deploy → copy **Webhook URL** → GitHub → Settings → Secrets and variables → Actions → `CPANEL_DEPLOY_WEBHOOK_URL` (not in `.env`) — see [docs/TMD_DEPLOY.md § Automatic deploy](docs/TMD_DEPLOY.md#automatic-deploy-on-github-push)
+- [ ] **Deploy loop** — push to GitHub → auto-deploy via GitHub Actions SSH (recommended) → restart Node app
+- [ ] **GitHub Actions SSH deploy** (recommended when cPanel webhook unavailable) — see [docs/TMD_DEPLOY.md § GitHub Actions SSH deploy](docs/TMD_DEPLOY.md#github-actions-ssh-deploy-recommended)
+  - [ ] Generate deploy key: `ssh-keygen -t ed25519 -f github_actions_fst -N ""`
+  - [ ] cPanel → **SSH Access** → **Manage SSH Keys** → import public key → **Authorize** for user `faststar`
+  - [ ] GitHub → Settings → Secrets and variables → Actions:
+    - `TMD_SSH_PRIVATE_KEY` — full private key contents
+    - `TMD_SSH_HOST` — e.g. `195.250.26.111` or `faststarttalking.com`
+    - `TMD_SSH_USER` — `faststar`
+    - `TMD_SSH_PORT` — optional, default `22`
+  - [ ] **Remove** `CPANEL_DEPLOY_WEBHOOK_URL` if it is a cPanel login URL (contains `cpsess`)
+  - [ ] After each deploy: cPanel → **Setup Node.js App** → **Restart** (Passenger limitation)
+- [ ] **Auto-deploy webhook (fallback)** — only if SSH deploy is not used; cPanel Git → Manage → Pull or Deploy → copy **Webhook URL** → GitHub secret `CPANEL_DEPLOY_WEBHOOK_URL` — see [docs/TMD_DEPLOY.md § Automatic deploy](docs/TMD_DEPLOY.md#automatic-deploy-on-github-push-cpanel-webhook-fallback)
 
 SSH and PostgreSQL dev access: [docs/TMD_SSH.md](docs/TMD_SSH.md).
 

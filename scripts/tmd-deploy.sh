@@ -75,7 +75,14 @@ if [[ "$TMD_SKIP_GIT_PULL" != "1" ]]; then
     log "Removing untracked server.js so git pull can proceed..."
     rm -f server.js
   fi
-  git pull origin main
+  if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+    log "WARNING: Working tree is dirty — resetting to origin/main."
+    log "GitHub Actions SSH deploy does this automatically before calling this script."
+    git fetch origin main
+    git reset --hard origin/main
+  else
+    git pull origin main
+  fi
 fi
 
 export PATH="${NODE_BIN}:$PATH"
