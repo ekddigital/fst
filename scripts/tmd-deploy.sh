@@ -272,22 +272,26 @@ atomic_swap_dir() {
 prune_old_releases() {
   local keep="$TMD_RELEASES_KEEP"
   local dirs=()
-  local d
-  while IFS= read -r d; do
-    [[ -n "$d" ]] && dirs+=("$d")
-  done < <(ls -1dt "${RELEASES_DIR}"/*/ 2>/dev/null | while read -r p; do
-    case "$(basename "$p")" in
-      backup-*) ;;
-      *) printf '%s\n' "${p%/}" ;;
-    esac
-  done)
+  local d name
+  shopt -s nullglob
+  for d in "${RELEASES_DIR}"/*/; do
+    name="$(basename "$d")"
+    [[ "$name" == backup-* ]] && continue
+    dirs+=("${d%/}")
+  done
+  shopt -u nullglob
   if [[ ${#dirs[@]} -le keep ]]; then
     return 0
   fi
+  # Sort by mtime newest first (portable)
+  local sorted=()
+  while IFS= read -r d; do
+    sorted+=("$d")
+  done < <(for d in "${dirs[@]}"; do stat -c '%Y %n' "$d" 2>/dev/null || stat -f '%m %N' "$d"; done | sort -rn | cut -d' ' -f2-)
   local i
-  for ((i = keep; i < ${#dirs[@]}; i++)); do
-    log "Pruning old release ${dirs[$i]}"
-    rm -rf "${dirs[$i]}"
+  for ((i = keep; i < ${#sorted[@]}; i++)); do
+    log "Pruning old release ${sorted[$i]}"
+    rm -rf "${sorted[$i]}"
   done
 }
 
