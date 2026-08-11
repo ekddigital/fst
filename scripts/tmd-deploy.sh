@@ -39,7 +39,7 @@ else
   npm install --ignore-scripts --no-audit --progress=false
 fi
 
-npx prisma generate
+npm run db:generate
 
 load_env_var() {
   local key="$1"
@@ -60,6 +60,8 @@ load_env_var() {
 DATABASE_URL="$(load_env_var DATABASE_URL)"
 ADMIN_PASSWORD="$(load_env_var ADMIN_PASSWORD)"
 NEXT_PUBLIC_SITE_URL="$(load_env_var NEXT_PUBLIC_SITE_URL)"
+NEXT_IMAGE_UNOPTIMIZED="$(grep -E "^NEXT_IMAGE_UNOPTIMIZED=" "$ENV_FILE" | tail -1 | cut -d= -f2- || echo true)"
+
 
 # Defensive: cPanel sometimes stores VALUE as "DATABASE_URL=postgresql://..."
 DATABASE_URL="${DATABASE_URL#DATABASE_URL=}"
@@ -72,13 +74,16 @@ run_clean() {
     DATABASE_URL="${DATABASE_URL}" \
     ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
     NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL}" \
+    NEXT_IMAGE_UNOPTIMIZED="${NEXT_IMAGE_UNOPTIMIZED}" \
+    NEXT_BUILD_CPUS=1 \
     "$@"
 }
 
+
 if [[ "$TMD_SKIP_SEED" != "1" ]]; then
   if ! run_clean npm run db:seed; then
-    echo "npm run db:seed failed; retrying with npx tsx..."
-    run_clean npx tsx prisma/seed.ts
+    echo "npm run db:seed failed; retrying with node_modules/.bin/tsx..."
+    run_clean ./node_modules/.bin/tsx prisma/seed.ts
   fi
 else
   echo "Skipping db:seed (TMD_SKIP_SEED=1)."
