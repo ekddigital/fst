@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
         experimental: {
           cpus: buildCpus,
           workerThreads: false,
+          webpackBuildWorker: false,
+          parallelServerCompiles: false,
         },
       }
     : {}),
