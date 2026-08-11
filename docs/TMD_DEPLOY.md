@@ -740,7 +740,7 @@ Some cPanel versions expose **Pull on push** or **Automatic pull** on the reposi
 | Limitation | Mitigation |
 |------------|------------|
 | **No Node app auto-restart** | `.cpanel.yml` cannot restart Passenger. **Restart** Setup Node.js App after each deploy (manual or scheduled). |
-| **LVE process limits** | `npm ci` + `next build` is heavy. **Do not** trigger multiple deploys in parallel (avoid pushing several commits in seconds, or firing webhook + manual deploy at once). Wait for one deploy to finish (~5–15 min). |
+| **LVE process limits** | `npm ci` + `next build` is heavy. **Do not** trigger multiple deploys in parallel. Close extra SSH sessions. Builds use `RAYON_NUM_THREADS=1` and `NEXT_BUILD_CPUS=1`. If build fails with `Resource temporarily unavailable`, wait 15–30 min and retry `bash scripts/tmd-deploy.sh` from cPanel Terminal only. |
 | **`.env` not in git** | Webhook deploy does not create or update secrets. Maintain `~/coding/fst/.env` on the server separately. |
 | **No `db:push` / `db:seed` on deploy** | Schema migrations: SSH and run `npm run db:push`. Seed only when needed: `./scripts/tmd-deploy.sh` (without `TMD_SKIP_SEED=1`). |
 | **Webhook is account-specific** | Do not reuse the URL across repos; create one webhook per cPanel Git repo. |
