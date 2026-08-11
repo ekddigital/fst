@@ -362,6 +362,8 @@ On your Mac: develop → `npx tsc --noEmit && npm run build` → `git push origi
 
 On TMD: cPanel → **Git Version Control** → `fst` → **Update from Remote** → **Deploy HEAD Commit** → **Setup Node.js App** → **Restart**.
 
+**Zero-downtime:** `scripts/tmd-deploy.sh` builds in `~/coding/fst-releases/<timestamp>/` and only swaps `.next` + `node_modules` into the live app after `BUILD_OK`. The previous release keeps serving during `npm ci` and `next build` (no 503 from in-place install). See [Zero-downtime deploy](#zero-downtime-deploy-blue-green).
+
 Schema changes: SSH in and run `npm run db:push` (deploy does not run push/seed every time).
 
 ---
@@ -601,11 +603,87 @@ source /home/faststar/nodevenv/coding/fst/22/bin/activate && cd ~/coding/fst && 
 flowchart LR
   Mac[Mac: develop] -->|git push| GH[GitHub main]
   GH -->|webhook| CP[cPanel Git pull + deploy]
-  CP --> Server[~/coding/fst]
-  Server -->|.cpanel.yml| Build[tmd-deploy.sh]
-  Build --> Node[cPanel Node.js App restart]
+  CP --> Live[~/coding/fst live]
+  CP --> Staging[~/coding/fst-releases/TIMESTAMP]
+  Staging -->|npm ci + build| Build[BUILD_OK]
+  Build -->|atomic swap| Live
+  Live --> Node[cPanel Node.js App restart]
   Node --> Sub[app.faststarttalking.com]
-  Server --> PG[(faststar_fst)]
+  Live --> PG[(faststar_fst)]
+```
+
+---
+
+## Zero-downtime deploy (blue-green)
+
+Adapted from the **lpad** canary pattern (`deploy/auto-deploy.sh`): build in isolation, verify, then swap — production stays untouched if the build fails.
+
+### Layout on TMD
+
+```text
+~/coding/fst/                    ← Passenger app root (live; git clone)
+~/coding/fst-releases/
+  20260811-102100/               ← staging build (source + fresh node_modules + .next)
+  20260811-104500/
+  backup-.next/                  ← previous live .next (rollback)
+  backup-node_modules/           ← previous live node_modules (rollback)
+  current-release                ← text file with last successful release id
+  deploy-20260811-104500.log
+```
+
+cPanel **Setup Node.js App** must keep **Application root** = `coding/fst` (fixed path). Builds never run `npm ci` in the live tree.
+
+### What `scripts/tmd-deploy.sh` does
+
+1. Acquire deploy lock (`fst-releases/.deploy.lock`) — rejects parallel deploys
+2. `git pull` in `~/coding/fst` (unless `TMD_SKIP_GIT_PULL=1`)
+3. Rsync source to `~/coding/fst-releases/<timestamp>/` (excludes live `.next`, `node_modules`, `.env`)
+4. Copy `.env` into staging
+5. `rm -rf node_modules && npm ci` **in staging only** (fixes `ENOTEMPTY` on live `node_modules`)
+6. `npm run db:generate`, optional seed, `npm run build` under `env -i` (vars from `.env`)
+7. On `BUILD_OK`: `mv` staging `.next` and `node_modules` into live; move previous live copies to `backup-*`
+8. Prune old timestamped releases (keep `TMD_RELEASES_KEEP`, default **3**)
+9. `touch tmp/restart.txt` (Passenger hint) — still **Restart** in cPanel
+
+### Rollback
+
+After a bad deploy:
+
+```bash
+cd ~/coding/fst
+bash scripts/tmd-rollback.sh
+# cPanel → Setup Node.js App → Restart
+```
+
+Restores `fst-releases/backup-.next` and `backup-node_modules` from the deploy **before** the last swap.
+
+### lpad comparison
+
+| lpad (VPS + Docker) | FST (TMD cPanel + Passenger) |
+|---------------------|------------------------------|
+| Build canary Docker image | Build in `fst-releases/<id>/` |
+| Health checks on port 9003 | Verify `.next/BUILD_ID` in staging |
+| Swap production container | Atomic `mv` of `.next` + `node_modules` into live |
+| Production unchanged on build fail | Live tree unchanged on build fail |
+
+### Recovery from failed in-place deploy (503 / ENOTEMPTY)
+
+If an **old** deploy ran `npm ci` in `~/coding/fst` and left the site on 503:
+
+```bash
+cd ~/coding/fst
+git pull origin main
+TMD_SKIP_GIT_PULL=1 TMD_SKIP_SEED=1 bash scripts/tmd-deploy.sh
+# wait for BUILD_OK, then cPanel → Setup Node.js App → Restart
+```
+
+Do **not** run `npm ci` in the live app root. The new script builds in staging and swaps on success.
+
+Long builds (survive disconnect):
+
+```bash
+cd ~/coding/fst && nohup env TMD_SKIP_GIT_PULL=1 TMD_SKIP_SEED=1 bash scripts/tmd-deploy.sh > ~/fst-deploy.log 2>&1 &
+tail -f ~/fst-deploy.log
 ```
 
 ---
@@ -690,12 +768,13 @@ deployment:
 
 `scripts/tmd-deploy.sh` (shared with manual Terminal deploy):
 
+- **Zero-downtime:** builds in `~/coding/fst-releases/<timestamp>/`; live `.next` + `node_modules` stay in place until `BUILD_OK`, then atomic swap (see [Zero-downtime deploy](#zero-downtime-deploy-blue-green))
 - Activates **nodevenv** (Node 22) and sets `NPM_CONFIG_PRODUCTION=false`
-- `npm ci` (or `npm install` if no lockfile)
+- `rm -rf node_modules && npm ci` in **staging only** (not live)
 - `npx prisma generate`
 - Loads `DATABASE_URL`, `ADMIN_PASSWORD`, `NEXT_PUBLIC_SITE_URL` from **`~/coding/fst/.env`** under `env -i` (ignores polluted cPanel shell vars)
 - Skips `db:seed` when `TMD_SKIP_SEED=1` (routine webhook deploys)
-- `npm run build` — verifies `.next/BUILD_ID`
+- `npm run build` — verifies `.next/BUILD_ID` in staging before swap
 
 Manual deploy from Terminal/SSH (includes `git pull` and seed):
 
@@ -837,9 +916,23 @@ Database unreachable at build time. On server, confirm `.env` uses `@127.0.0.1:5
 
 ### Node.js app shows 503 / blank page
 
-- Confirm `npm run build` completed (`.next/` exists)
+- Confirm a successful deploy finished (`BUILD_OK` in log under `~/coding/fst-releases/deploy-*.log`)
+- **Do not** run `npm ci` in `~/coding/fst` during traffic — use `scripts/tmd-deploy.sh` (staging build + swap)
+- If 503 after a failed in-place `npm ci`, pull latest script and redeploy: `TMD_SKIP_GIT_PULL=1 TMD_SKIP_SEED=1 bash scripts/tmd-deploy.sh`
 - Restart the Node.js app after env or code changes
 - Verify `NEXT_PUBLIC_SITE_URL` matches the live subdomain
+
+### `npm ci` ENOTEMPTY on `node_modules`
+
+Caused by running install in the **live** app while Passenger holds files open. Fix:
+
+```bash
+cd ~/coding/fst
+git pull origin main
+TMD_SKIP_GIT_PULL=1 TMD_SKIP_SEED=1 bash scripts/tmd-deploy.sh
+```
+
+The deploy script runs `rm -rf node_modules && npm ci` only in `~/coding/fst-releases/<timestamp>/`.
 
 ### Git pull and `.env`
 

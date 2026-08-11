@@ -1,30 +1,78 @@
 #!/usr/bin/env bash
-# FST deploy on TMD (cPanel Terminal, SSH, or .cpanel.yml "Deploy HEAD Commit").
-# Uses env -i for db:seed/build so cPanel Node env pollution cannot break Prisma.
+# FST zero-downtime deploy on TMD (cPanel Terminal, SSH, or .cpanel.yml "Deploy HEAD Commit").
+#
+# Builds in ~/coding/fst-releases/<timestamp>/ while the live app at ~/coding/fst
+# keeps serving the previous .next + node_modules. On BUILD_OK, atomically swaps
+# artifacts into the live tree (lpad-style canary → swap, adapted for Passenger).
 #
 # Environment:
 #   TMD_SKIP_GIT_PULL=1  — skip git pull (set by .cpanel.yml; cPanel already checked out HEAD)
 #   TMD_SKIP_SEED=1      — skip npm run db:seed (recommended for routine deploys)
-#   DEPLOYPATH           — app root (default: /home/faststar/coding/fst)
+#   TMD_RELEASES_KEEP=3  — retain this many timestamped release dirs (default 3)
+#   DEPLOYPATH           — live app root (default: /home/faststar/coding/fst)
+#   RELEASES_DIR         — staging releases (default: /home/faststar/coding/fst-releases)
 #   ENV_FILE             — path to .env (default: $DEPLOYPATH/.env)
 set -euo pipefail
 
 DEPLOYPATH="${DEPLOYPATH:-/home/faststar/coding/fst}"
+RELEASES_DIR="${RELEASES_DIR:-/home/faststar/coding/fst-releases}"
 ENV_FILE="${ENV_FILE:-$DEPLOYPATH/.env}"
 NODE_BIN="/home/faststar/nodevenv/coding/fst/22/bin"
 NODE_MODULES="/home/faststar/nodevenv/coding/fst/22/lib/node_modules"
 TMD_SKIP_GIT_PULL="${TMD_SKIP_GIT_PULL:-0}"
 TMD_SKIP_SEED="${TMD_SKIP_SEED:-0}"
+TMD_RELEASES_KEEP="${TMD_RELEASES_KEEP:-3}"
+
+LOCK_FILE="${RELEASES_DIR}/.deploy.lock"
+RELEASE_ID="$(date +%Y%m%d-%H%M%S)"
+STAGING="${RELEASES_DIR}/${RELEASE_ID}"
+LOG_FILE="${RELEASES_DIR}/deploy-${RELEASE_ID}.log"
+
+mkdir -p "$RELEASES_DIR"
+
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+acquire_lock() {
+  if [[ -f "$LOCK_FILE" ]]; then
+    local pid
+    pid="$(cat "$LOCK_FILE" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      log "Another deploy is running (pid ${pid}). Wait for it to finish."
+      exit 9
+    fi
+    log "Removing stale deploy lock (pid ${pid:-unknown} not running)."
+    rm -f "$LOCK_FILE"
+  fi
+  echo "$$" >"$LOCK_FILE"
+}
+
+release_lock() {
+  rm -f "$LOCK_FILE"
+}
+
+cleanup_failed_staging() {
+  if [[ -d "$STAGING" ]]; then
+    log "Build failed — removing incomplete staging release ${RELEASE_ID}."
+    rm -rf "$STAGING"
+  fi
+}
+
+trap 'release_lock' EXIT
+
+acquire_lock
+log "=== FST zero-downtime deploy ${RELEASE_ID} ==="
+log "Live app: ${DEPLOYPATH}"
+log "Staging:  ${STAGING}"
 
 cd "$DEPLOYPATH"
 
 if [[ "$TMD_SKIP_GIT_PULL" != "1" ]]; then
-  # Untracked server.js (legacy cPanel copy) blocks `git pull` now that server.js is tracked on main.
   if [[ -f server.js ]] && ! git ls-files --error-unmatch server.js >/dev/null 2>&1; then
-    echo "Removing untracked server.js so git pull can proceed..."
+    log "Removing untracked server.js so git pull can proceed..."
     rm -f server.js
   fi
-
   git pull origin main
 fi
 
@@ -32,14 +80,71 @@ export PATH="${NODE_BIN}:$PATH"
 export NODE_PATH="${NODE_MODULES}"
 export NPM_CONFIG_PRODUCTION=false
 
-# Skip postinstall (prisma generate) during install — avoids duplicate/hung generate on LVE hosts.
-if [[ -f package-lock.json ]]; then
-  npm ci --ignore-scripts --no-audit --progress=false
-else
-  npm install --ignore-scripts --no-audit --progress=false
+if [[ ! -f "$ENV_FILE" ]]; then
+  log "Missing ${ENV_FILE} — create it before deploying." >&2
+  exit 1
 fi
 
-npm run db:generate
+mkdir -p "$STAGING"
+
+sync_source_to_staging() {
+  log "Syncing source to staging (live .next/node_modules untouched)..."
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a \
+      --exclude 'node_modules/' \
+      --exclude '.next/' \
+      --exclude '.env' \
+      --exclude 'fst-releases/' \
+      --exclude '.git/' \
+      "$DEPLOYPATH/" "$STAGING/"
+  else
+    tar -C "$DEPLOYPATH" \
+      --exclude='node_modules' \
+      --exclude='.next' \
+      --exclude='.env' \
+      --exclude='fst-releases' \
+      --exclude='.git' \
+      -cf - . | tar -C "$STAGING" -xf -
+  fi
+  cp -a "$ENV_FILE" "$STAGING/.env"
+}
+
+install_and_build() {
+  cd "$STAGING"
+
+  log "Clean npm ci in staging (avoids ENOTEMPTY on live node_modules)..."
+  rm -rf node_modules
+  if [[ -f package-lock.json ]]; then
+    npm ci --ignore-scripts --no-audit --progress=false
+  else
+    npm install --ignore-scripts --no-audit --progress=false
+  fi
+
+  npm run db:generate
+
+  local DATABASE_URL ADMIN_PASSWORD NEXT_PUBLIC_SITE_URL NEXT_IMAGE_UNOPTIMIZED
+  DATABASE_URL="$(load_env_var DATABASE_URL)"
+  ADMIN_PASSWORD="$(load_env_var ADMIN_PASSWORD)"
+  NEXT_PUBLIC_SITE_URL="$(load_env_var NEXT_PUBLIC_SITE_URL)"
+  NEXT_IMAGE_UNOPTIMIZED="$(grep -E "^NEXT_IMAGE_UNOPTIMIZED=" "$ENV_FILE" | tail -1 | cut -d= -f2- || echo true)"
+  DATABASE_URL="${DATABASE_URL#DATABASE_URL=}"
+
+  if [[ "$TMD_SKIP_SEED" != "1" ]]; then
+    if ! run_clean "$DATABASE_URL" "$ADMIN_PASSWORD" "$NEXT_PUBLIC_SITE_URL" "$NEXT_IMAGE_UNOPTIMIZED" npm run db:seed; then
+      log "npm run db:seed failed; retrying with node_modules/.bin/tsx..."
+      run_clean "$DATABASE_URL" "$ADMIN_PASSWORD" "$NEXT_PUBLIC_SITE_URL" "$NEXT_IMAGE_UNOPTIMIZED" ./node_modules/.bin/tsx prisma/seed.ts
+    fi
+  else
+    log "Skipping db:seed (TMD_SKIP_SEED=1)."
+  fi
+
+  run_clean "$DATABASE_URL" "$ADMIN_PASSWORD" "$NEXT_PUBLIC_SITE_URL" "$NEXT_IMAGE_UNOPTIMIZED" npm run build
+
+  if [[ ! -f .next/BUILD_ID ]]; then
+    log "BUILD_FAILED — .next/BUILD_ID missing in staging." >&2
+    return 1
+  fi
+}
 
 load_env_var() {
   local key="$1"
@@ -57,16 +162,12 @@ load_env_var() {
   printf '%s' "$val"
 }
 
-DATABASE_URL="$(load_env_var DATABASE_URL)"
-ADMIN_PASSWORD="$(load_env_var ADMIN_PASSWORD)"
-NEXT_PUBLIC_SITE_URL="$(load_env_var NEXT_PUBLIC_SITE_URL)"
-NEXT_IMAGE_UNOPTIMIZED="$(grep -E "^NEXT_IMAGE_UNOPTIMIZED=" "$ENV_FILE" | tail -1 | cut -d= -f2- || echo true)"
-
-
-# Defensive: cPanel sometimes stores VALUE as "DATABASE_URL=postgresql://..."
-DATABASE_URL="${DATABASE_URL#DATABASE_URL=}"
-
 run_clean() {
+  local DATABASE_URL="$1"
+  local ADMIN_PASSWORD="$2"
+  local NEXT_PUBLIC_SITE_URL="$3"
+  local NEXT_IMAGE_UNOPTIMIZED="$4"
+  shift 4
   env -i \
     HOME="${HOME:-/home/faststar}" \
     PATH="${NODE_BIN}:/usr/bin:/bin" \
@@ -76,24 +177,77 @@ run_clean() {
     NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL}" \
     NEXT_IMAGE_UNOPTIMIZED="${NEXT_IMAGE_UNOPTIMIZED}" \
     NEXT_BUILD_CPUS=1 \
-    "$@"
+    "$@" 
 }
 
+atomic_swap_dir() {
+  local name="$1"
+  local live="${DEPLOYPATH}/${name}"
+  local incoming="${STAGING}/${name}"
+  local backup="${RELEASES_DIR}/backup-${name}"
 
-if [[ "$TMD_SKIP_SEED" != "1" ]]; then
-  if ! run_clean npm run db:seed; then
-    echo "npm run db:seed failed; retrying with node_modules/.bin/tsx..."
-    run_clean ./node_modules/.bin/tsx prisma/seed.ts
+  if [[ ! -e "$incoming" ]]; then
+    log "Nothing to swap for ${name} (missing in staging)."
+    return 0
   fi
-else
-  echo "Skipping db:seed (TMD_SKIP_SEED=1)."
-fi
 
-run_clean npm run build
+  rm -rf "$backup"
+  if [[ -e "$live" ]]; then
+    mv "$live" "$backup"
+    log "Backed up live ${name} → ${backup}"
+  fi
 
-if [[ -f .next/BUILD_ID ]]; then
-  echo "BUILD_OK — restart Setup Node.js App in cPanel."
-else
-  echo "BUILD_FAILED — .next/BUILD_ID missing." >&2
+  mv "$incoming" "$live"
+  log "Swapped ${name} into live app."
+}
+
+prune_old_releases() {
+  local keep="$TMD_RELEASES_KEEP"
+  local dirs=()
+  local d
+  while IFS= read -r d; do
+    [[ -n "$d" ]] && dirs+=("$d")
+  done < <(ls -1dt "${RELEASES_DIR}"/*/ 2>/dev/null | while read -r p; do
+    case "$(basename "$p")" in
+      backup-*) ;;
+      *) printf '%s\n' "${p%/}" ;;
+    esac
+  done)
+  if [[ ${#dirs[@]} -le keep ]]; then
+    return 0
+  fi
+  local i
+  for ((i = keep; i < ${#dirs[@]}; i++)); do
+    log "Pruning old release ${dirs[$i]}"
+    rm -rf "${dirs[$i]}"
+  done
+}
+
+passenger_restart_hint() {
+  mkdir -p "${DEPLOYPATH}/tmp"
+  touch "${DEPLOYPATH}/tmp/restart.txt" 2>/dev/null || true
+}
+
+if ! sync_source_to_staging; then
+  cleanup_failed_staging
   exit 1
 fi
+
+if ! install_and_build; then
+  cleanup_failed_staging
+  exit 1
+fi
+
+log "BUILD_OK in staging — swapping artifacts into live (site served old build until restart)..."
+
+atomic_swap_dir "node_modules"
+atomic_swap_dir ".next"
+
+echo "$RELEASE_ID" >"${RELEASES_DIR}/current-release"
+prune_old_releases
+passenger_restart_hint
+
+log "BUILD_OK — release ${RELEASE_ID} is live on disk."
+log "Restart Setup Node.js App in cPanel (or: touch ~/coding/fst/tmp/restart.txt)."
+log "Deploy log: ${LOG_FILE}"
+log "Rollback: bash scripts/tmd-rollback.sh"
