@@ -771,7 +771,7 @@ For Terminal seed/build, use **`./scripts/tmd-deploy.sh`** — it runs under `en
 
 CloudLinux LVE can block `npm run build` or `git pull` when too many processes are open (extra SSH sessions, IDE remote terminals, stuck `node`/`npm`).
 
-The deploy script uses PATH-only nodevenv setup (no `source activate`) to reduce forks.
+The deploy script uses PATH-only nodevenv setup (no `source activate`) to reduce forks, and `npm ci --ignore-scripts` so postinstall `prisma generate` does not run twice or hang during install.
 
 **Fix:**
 

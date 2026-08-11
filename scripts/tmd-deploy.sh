@@ -32,10 +32,11 @@ export PATH="${NODE_BIN}:$PATH"
 export NODE_PATH="${NODE_MODULES}"
 export NPM_CONFIG_PRODUCTION=false
 
+# Skip postinstall (prisma generate) during install — avoids duplicate/hung generate on LVE hosts.
 if [[ -f package-lock.json ]]; then
-  npm ci --no-audit --progress=false
+  npm ci --ignore-scripts --no-audit --progress=false
 else
-  npm install --no-audit --progress=false
+  npm install --ignore-scripts --no-audit --progress=false
 fi
 
 npx prisma generate
