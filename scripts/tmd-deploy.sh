@@ -8,6 +8,7 @@
 # Environment:
 #   TMD_SKIP_GIT_PULL=1  — skip git pull (set by .cpanel.yml; cPanel already checked out HEAD)
 #   TMD_SKIP_SEED=1      — skip npm run db:seed (recommended for routine deploys)
+#   TMD_SWAP_NODE_MODULES_ONLY=1 — install deps in staging and swap node_modules only (keep live .next)
 #   TMD_RELEASES_KEEP=3  — retain this many timestamped release dirs (default 3)
 #   DEPLOYPATH           — live app root (default: /home/faststar/coding/fst)
 #   RELEASES_DIR         — staging releases (default: /home/faststar/coding/fst-releases)
@@ -21,6 +22,7 @@ NODE_BIN="/home/faststar/nodevenv/coding/fst/22/bin"
 NODE_MODULES="/home/faststar/nodevenv/coding/fst/22/lib/node_modules"
 TMD_SKIP_GIT_PULL="${TMD_SKIP_GIT_PULL:-0}"
 TMD_SKIP_SEED="${TMD_SKIP_SEED:-0}"
+TMD_SWAP_NODE_MODULES_ONLY="${TMD_SWAP_NODE_MODULES_ONLY:-0}"
 TMD_RELEASES_KEEP="${TMD_RELEASES_KEEP:-3}"
 
 LOCK_FILE="${RELEASES_DIR}/.deploy.lock"
@@ -117,8 +119,8 @@ install_staging_deps() {
   rm -rf node_modules
 
   local live_modules="${DEPLOYPATH}/node_modules"
-  if [[ -d "$live_modules/next" ]]; then
-    log "Seeding staging node_modules from live, then npm install (LVE-friendly)..."
+  if [[ -x "$live_modules/.bin/prisma" && -x "$live_modules/.bin/next" ]]; then
+    log "Seeding staging node_modules from healthy live tree, then npm install..."
     if command -v rsync >/dev/null 2>&1; then
       rsync -a "$live_modules/" node_modules/
     else
@@ -199,9 +201,14 @@ install_and_build() {
     log "Skipping db:seed (TMD_SKIP_SEED=1)."
   fi
 
+  if [[ "$TMD_SWAP_NODE_MODULES_ONLY" == "1" ]]; then
+    log "TMD_SWAP_NODE_MODULES_ONLY=1 — skipping build; live .next preserved."
+    return 0
+  fi
+
   run_clean "$DATABASE_URL" "$ADMIN_PASSWORD" "$NEXT_PUBLIC_SITE_URL" "$NEXT_IMAGE_UNOPTIMIZED" npm run build
 
-  if [[ ! -f .next/BUILD_ID ]]; then
+  if [[ ! -f .next/BUILD_ID && "$TMD_SWAP_NODE_MODULES_ONLY" != "1" ]]; then
     log "BUILD_FAILED — .next/BUILD_ID missing in staging." >&2
     return 1
   fi
@@ -302,7 +309,11 @@ fi
 log "BUILD_OK in staging — swapping artifacts into live (site served old build until restart)..."
 
 atomic_swap_dir "node_modules"
-atomic_swap_dir ".next"
+if [[ "$TMD_SWAP_NODE_MODULES_ONLY" != "1" ]]; then
+  atomic_swap_dir ".next"
+else
+  log "Skipped .next swap (node_modules-only recovery)."
+fi
 
 echo "$RELEASE_ID" >"${RELEASES_DIR}/current-release"
 prune_old_releases
