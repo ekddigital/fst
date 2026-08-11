@@ -692,6 +692,8 @@ tail -f ~/fst-deploy.log
 
 cPanel **Git Version Control** can pull from GitHub and run **Deploy HEAD Commit** (`.cpanel.yml`) when it receives a webhook. One push to `main` replaces manual **Update from Remote** + **Deploy HEAD Commit**.
 
+> **Do not put the webhook URL in `.env`.** `CPANEL_DEPLOY_WEBHOOK_URL` is a **GitHub Actions repository secret** only (see [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml)). Local `.env` and server `~/coding/fst/.env` are for runtime app vars (`DATABASE_URL`, `ADMIN_PASSWORD`, `NEXT_PUBLIC_SITE_URL`) — see [`.env.example`](../.env.example). Paste the cPanel **Webhook URL** from **Pull or Deploy** (not a cPanel dashboard/login URL with `cpsess`).
+
 ### Prerequisites
 
 - Repo cloned in cPanel at `/home/faststar/coding/fst` with SSH deploy key (see [Option A](#option-a--ssh-deploy-key-recommended))
@@ -708,16 +710,29 @@ cPanel **Git Version Control** can pull from GitHub and run **Deploy HEAD Commit
 
 Keep this URL private — anyone with it can trigger a pull/deploy on your server.
 
-### Step 2 — Add the webhook in GitHub
+### Step 2 — Add the webhook URL as a GitHub Actions secret (recommended)
 
-1. GitHub → [ekddigital/fst](https://github.com/ekddigital/fst) → **Settings** → **Webhooks** → **Add webhook**
-2. **Payload URL:** paste the cPanel Webhook URL from Step 1
+This repo triggers deploy from [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) after CI passes on push to `main`.
+
+1. GitHub → [ekddigital/fst](https://github.com/ekddigital/fst) → **Settings** → **Secrets and variables** → **Actions**
+2. **New repository secret**
+3. Name: `CPANEL_DEPLOY_WEBHOOK_URL`
+4. Value: paste the cPanel Webhook URL from Step 1 (full URL; auth is usually in the query string)
+5. **Do not** also add the same URL under **Settings → Webhooks** — that would double-deploy.
+
+If the secret is missing, the workflow still runs verify/build but skips deploy with a warning.
+
+<details>
+<summary>Alternative — GitHub Webhooks (manual setup; not used by this repo’s workflow)</summary>
+
+1. GitHub → **Settings** → **Webhooks** → **Add webhook**
+2. **Payload URL:** cPanel Webhook URL from Step 1
 3. **Content type:** `application/json`
-4. **Secret:** leave empty unless cPanel shows a shared secret for your host (most TMD setups use URL-only auth)
-5. **Which events:** **Just the push event**
-6. **Active:** checked → **Add webhook**
+4. **Which events:** **Just the push event**
 
-GitHub sends a `push` payload after each push to any branch. cPanel typically pulls the configured tracking branch (`main`) and runs deployment tasks when the push matches.
+Do not use both Actions secret **and** a GitHub Webhook with the same cPanel URL.
+
+</details>
 
 ### Step 3 — Verify
 
