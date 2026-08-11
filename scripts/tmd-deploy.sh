@@ -109,15 +109,76 @@ sync_source_to_staging() {
   cp -a "$ENV_FILE" "$STAGING/.env"
 }
 
+install_staging_deps() {
+  cd "$STAGING"
+  export NPM_CONFIG_JOBS="${NPM_CONFIG_JOBS:-1}"
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
+
+  rm -rf node_modules
+
+  local live_modules="${DEPLOYPATH}/node_modules"
+  if [[ -d "$live_modules/next" ]]; then
+    log "Seeding staging node_modules from live, then npm install (LVE-friendly)..."
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a "$live_modules/" node_modules/
+    else
+      cp -a "$live_modules" node_modules
+    fi
+    if ! npm install --ignore-scripts --no-audit --progress=false; then
+      log "Incremental npm install failed — retrying clean npm ci..."
+      rm -rf node_modules
+      if ! npm_ci_with_retry; then
+        return 1
+      fi
+    fi
+  else
+    log "Clean npm ci in staging (live node_modules unavailable)..."
+    if ! npm_ci_with_retry; then
+      return 1
+    fi
+  fi
+
+  if [[ ! -x node_modules/.bin/prisma ]]; then
+    log "prisma CLI still missing — installing prisma packages..."
+    if ! npm install prisma@6.19.3 @prisma/client@6.19.3 --ignore-scripts --no-audit --progress=false; then
+      log "Failed to install prisma in staging." >&2
+      return 1
+    fi
+  fi
+
+  if [[ ! -x node_modules/.bin/next ]]; then
+    log "next CLI missing after install — staging deps incomplete." >&2
+    return 1
+  fi
+
+  return 0
+}
+
+npm_ci_with_retry() {
+  local attempt
+  for attempt in 1 2; do
+    if [[ "$attempt" -gt 1 ]]; then
+      log "npm ci retry ${attempt}/2 after rm -rf node_modules..."
+      rm -rf node_modules
+      sleep 5
+    fi
+    if [[ -f package-lock.json ]]; then
+      if npm ci --ignore-scripts --no-audit --progress=false; then
+        return 0
+      fi
+    elif npm install --ignore-scripts --no-audit --progress=false; then
+      return 0
+    fi
+    log "npm ci/install attempt ${attempt} failed."
+  done
+  return 1
+}
+
 install_and_build() {
   cd "$STAGING"
 
-  log "Clean npm ci in staging (avoids ENOTEMPTY on live node_modules)..."
-  rm -rf node_modules
-  if [[ -f package-lock.json ]]; then
-    npm ci --ignore-scripts --no-audit --progress=false
-  else
-    npm install --ignore-scripts --no-audit --progress=false
+  if ! install_staging_deps; then
+    return 1
   fi
 
   npm run db:generate
