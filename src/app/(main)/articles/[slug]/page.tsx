@@ -9,9 +9,13 @@ import { getArticleBySlug, getPublishedArticles } from "@/lib/data/catalog";
 type Props = { params: Promise<{ slug: string }> };
 
 export async function generateStaticParams() {
-  const dbArticles = await getPublishedArticles();
-  if (dbArticles.length > 0) {
-    return dbArticles.map((article) => ({ slug: article.slug }));
+  try {
+    const dbArticles = await getPublishedArticles();
+    if (dbArticles.length > 0) {
+      return dbArticles.map((article) => ({ slug: article.slug }));
+    }
+  } catch {
+    /* DB may be unreachable at build time */
   }
   const { ARTICLE_SLUG_MAP } = await import("@/lib/content");
   return Object.values(ARTICLE_SLUG_MAP).map((slug) => ({ slug }));

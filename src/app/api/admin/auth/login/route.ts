@@ -1,4 +1,5 @@
-import { apiSuccess, badRequest, resolveRequestId, serverError, unauthorized } from "@/lib/api/response";
+import { apiSuccess, badRequest, resolveRequestId, serverError, tooManyRequests, unauthorized, validationError } from "@/lib/api/response";
+import { checkRateLimit, rateLimitKey } from "@/lib/api/rate-limit";
 import {
   createSessionToken,
   isAdminConfigured,
@@ -9,6 +10,11 @@ import { adminLoginSchema } from "@/lib/validations/admin";
 
 export async function POST(request: Request) {
   const requestId = resolveRequestId(request.headers.get("x-request-id"));
+
+  const limit = checkRateLimit(rateLimitKey(request, "admin-login"));
+  if (!limit.allowed) {
+    return tooManyRequests(limit.retryAfterSec ?? 60, requestId);
+  }
 
   if (!isAdminConfigured()) {
     return serverError("Admin access is not configured.", requestId);
@@ -23,7 +29,7 @@ export async function POST(request: Request) {
 
   const parsed = adminLoginSchema.safeParse(body);
   if (!parsed.success) {
-    return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+    return validationError(parsed.error.flatten().fieldErrors, requestId);
   }
 
   if (!verifyAdminPassword(parsed.data.password)) {

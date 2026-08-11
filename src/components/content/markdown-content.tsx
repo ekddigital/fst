@@ -48,8 +48,15 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
                 />
               );
             }
+            const isExternal = href?.startsWith("http://") || href?.startsWith("https://");
+            const safeHref = href && !href.toLowerCase().startsWith("javascript:") ? href : undefined;
+            if (!safeHref) return <span>{children}</span>;
             return (
-              <a href={href} className="font-medium text-primary underline-offset-4 hover:underline">
+              <a
+                href={safeHref}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+                {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              >
                 {children}
               </a>
             );

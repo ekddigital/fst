@@ -15,3 +15,14 @@ if (process.env.NODE_ENV !== "production") {
 export function isDatabaseConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL);
 }
+
+/** Run a DB query; return fallback when DATABASE_URL is missing or the server is unreachable. */
+export async function withDb<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  if (!isDatabaseConfigured()) return fallback;
+  try {
+    return await fn();
+  } catch (err) {
+    console.error("[db] query failed:", err);
+    return fallback;
+  }
+}

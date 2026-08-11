@@ -1,4 +1,4 @@
-import { apiSuccess, badRequest, created } from "@/lib/api/response";
+import { apiSuccess, badRequest, validationError, created } from "@/lib/api/response";
 import { runAdminRoute } from "@/lib/api/admin-route";
 import { db } from "@/lib/db";
 import { categoryCreateSchema } from "@/lib/validations/admin";
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
     const parsed = categoryCreateSchema.safeParse(body);
     if (!parsed.success) {
-      return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+      return validationError(parsed.error.flatten().fieldErrors, requestId);
     }
 
     const maxOrder = await db.resourceCategory.aggregate({ _max: { sortOrder: true } });

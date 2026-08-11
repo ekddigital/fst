@@ -10,6 +10,7 @@ import { WatchTimeBarChart } from "@/components/admin/dashboard-charts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { adminFetch } from "@/lib/admin/client";
+import { formatAdminErrorMessage } from "@/lib/admin/api-feedback";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 
 type WatchData = {
@@ -38,7 +39,7 @@ export default function AdminWatchTimePage() {
     const res = await adminFetch<WatchData>("/api/admin/analytics");
     if (res.success) {
       setData({ topVideos: res.data.topVideos, watchTime: res.data.watchTime });
-    } else toast.error(res.error.message);
+    } else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     setLoading(false);
   }, []);
 

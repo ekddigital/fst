@@ -1,23 +1,36 @@
-import { apiSuccess, badRequest, created } from "@/lib/api/response";
+import { apiSuccess, badRequest, validationError, created } from "@/lib/api/response";
 import { runAdminRoute } from "@/lib/api/admin-route";
+import { buildPaginationMeta, paginationSkip, parsePagination } from "@/lib/data/pagination";
 import { db } from "@/lib/db";
 import { resourceCreateSchema, resourceListQuerySchema } from "@/lib/validations/admin";
 
 export async function GET(request: Request) {
   return runAdminRoute(request, async (req, requestId) => {
-    const params = Object.fromEntries(new URL(req.url).searchParams);
+    const url = new URL(req.url);
+    const params = Object.fromEntries(url.searchParams);
     const query = resourceListQuerySchema.safeParse(params);
     if (!query.success) {
-      return badRequest("Validation failed", query.error.flatten().fieldErrors, requestId);
+      return validationError(query.error.flatten().fieldErrors, requestId);
     }
+    const { page, pageSize } = parsePagination(url.searchParams);
+    const where = query.data.categoryId ? { categoryId: query.data.categoryId } : {};
 
-    const resources = await db.resource.findMany({
-      where: query.data.categoryId ? { categoryId: query.data.categoryId } : undefined,
-      orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
-      include: { category: { select: { id: true, title: true, slug: true } } },
-    });
+    const [total, resources] = await Promise.all([
+      db.resource.count({ where }),
+      db.resource.findMany({
+        where,
+        orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+        include: { category: { select: { id: true, title: true, slug: true } } },
+        skip: paginationSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
 
-    return apiSuccess({ resources, requestId }, 200, requestId);
+    return apiSuccess(
+      { resources, pagination: buildPaginationMeta(total, page, pageSize), requestId },
+      200,
+      requestId,
+    );
   });
 }
 
@@ -32,7 +45,7 @@ export async function POST(request: Request) {
 
     const parsed = resourceCreateSchema.safeParse(body);
     if (!parsed.success) {
-      return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+      return validationError(parsed.error.flatten().fieldErrors, requestId);
     }
 
     const category = await db.resourceCategory.findUnique({

@@ -17,7 +17,7 @@ import {
 } from "@/components/admin/dashboard-sections";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { getDashboardStats, getRecentActivity, getSubmissionTrends } from "@/lib/admin/dashboard";
-import { db, isDatabaseConfigured } from "@/lib/db";
+import { db, isDatabaseConfigured, withDb } from "@/lib/db";
 
 function formatWatchTime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -40,10 +40,24 @@ export default async function AdminDashboardPage() {
   }
 
   const [stats, activity, trends, pendingRequests] = await Promise.all([
-    getDashboardStats(),
-    getRecentActivity(8),
-    getSubmissionTrends(14),
-    db.resourceRequest.count({ where: { status: "PENDING" } }),
+    withDb(() => getDashboardStats(), {
+      categories: 0,
+      resources: 0,
+      videos: 0,
+      articles: 0,
+      publishedArticles: 0,
+      assessments: 0,
+      resourceRequests: 0,
+      pendingResourceRequests: 0,
+      assessmentSubmissions: 0,
+      contactSubmissions: 0,
+      pendingBills: 0,
+      totalWatchSeconds: 0,
+      activePromotions: 0,
+    }),
+    withDb(() => getRecentActivity(8), []),
+    withDb(() => getSubmissionTrends(14), []),
+    withDb(() => db.resourceRequest.count({ where: { status: "PENDING" } }), 0),
   ]);
 
   const totalSubmissions = stats.assessmentSubmissions + stats.contactSubmissions + stats.resourceRequests;

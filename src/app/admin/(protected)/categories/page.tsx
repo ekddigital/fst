@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch, slugify, swapIds } from "@/lib/admin/client";
+import { adminNotifyError, formatAdminErrorMessage } from "@/lib/admin/api-feedback";
+import { AdminFormErrors } from "@/components/admin/admin-form-errors";
 import { AdminTableSkeleton } from "@/components/ui/skeleton";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { ButtonLoadingContent } from "@/components/ui/loading-inline";
@@ -41,12 +43,14 @@ export default function AdminCategoriesPage() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>();
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     const res = await adminFetch<{ categories: Category[] }>("/api/admin/categories");
     if (res.success) setCategories(res.data.categories);
-    else toast.error(res.error.message);
+    else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     setLoading(false);
   }, []);
 
@@ -57,6 +61,7 @@ export default function AdminCategoriesPage() {
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
+    setFieldErrors(undefined);
     setDialogOpen(true);
   }
 
@@ -68,11 +73,13 @@ export default function AdminCategoriesPage() {
       description: category.description ?? "",
       published: category.published,
     });
+    setFieldErrors(undefined);
     setDialogOpen(true);
   }
 
   async function save() {
     setSaving(true);
+    setFieldErrors(undefined);
     const slug = form.slug || slugify(form.title);
     const payload = {
       slug,
@@ -90,7 +97,7 @@ export default function AdminCategoriesPage() {
 
     setSaving(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      setFieldErrors(adminNotifyError(res));
       return;
     }
     toast.success(editing ? "Category updated" : "Category created");
@@ -100,9 +107,11 @@ export default function AdminCategoriesPage() {
 
   async function confirmDelete() {
     if (!deleteTarget) return;
+    setDeleting(true);
     const res = await adminFetch(`/api/admin/categories/${deleteTarget.id}`, { method: "DELETE" });
+    setDeleting(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     toast.success("Category deleted");
@@ -120,7 +129,7 @@ export default function AdminCategoriesPage() {
       body: JSON.stringify({ ids: next }),
     });
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     setCategories(res.data.categories);
@@ -198,6 +207,7 @@ export default function AdminCategoriesPage() {
             <DialogTitle>{editing ? "Edit category" : "New category"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <AdminFormErrors errors={fieldErrors} />
             <div className="space-y-2">
               <Label htmlFor="title">Title</Label>
               <Input
@@ -258,8 +268,13 @@ export default function AdminCategoriesPage() {
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button variant="default" className="bg-destructive hover:bg-destructive/90" onClick={() => void confirmDelete()}>
-              Delete
+            <Button
+              variant="default"
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              <ButtonLoadingContent loading={deleting} loadingText="Deleting…" idleText="Delete" />
             </Button>
           </DialogFooter>
         </DialogContent>

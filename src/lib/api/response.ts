@@ -26,7 +26,15 @@ export function apiError(status: number, error: ApiErrorBody, requestId?: string
 }
 
 export function badRequest(message: string, details?: unknown, requestId?: string) {
-  return apiError(400, { code: "VALIDATION_ERROR", message, details }, requestId);
+  return apiError(400, { code: "BAD_REQUEST", message, details }, requestId);
+}
+
+export function unprocessableEntity(message: string, details?: unknown, requestId?: string) {
+  return apiError(422, { code: "VALIDATION_ERROR", message, details }, requestId);
+}
+
+export function validationError(fieldErrors: Record<string, string[] | undefined>, requestId?: string) {
+  return unprocessableEntity("Validation failed", fieldErrors, requestId);
 }
 
 export function unauthorized(message = "Authentication required.", requestId?: string) {

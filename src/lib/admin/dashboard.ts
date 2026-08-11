@@ -300,17 +300,22 @@ export async function getAssessmentStats() {
 }
 
 export async function getActivePromotions() {
+  const { withDb } = await import("@/lib/db");
   const now = new Date();
-  return db.promotion.findMany({
-    where: {
-      active: true,
-      OR: [
-        { startDate: null, endDate: null },
-        { startDate: { lte: now }, endDate: null },
-        { startDate: null, endDate: { gte: now } },
-        { startDate: { lte: now }, endDate: { gte: now } },
-      ],
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  return withDb(
+    () =>
+      db.promotion.findMany({
+        where: {
+          active: true,
+          OR: [
+            { startDate: null, endDate: null },
+            { startDate: { lte: now }, endDate: null },
+            { startDate: null, endDate: { gte: now } },
+            { startDate: { lte: now }, endDate: { gte: now } },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    [],
+  );
 }

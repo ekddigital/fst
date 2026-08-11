@@ -56,83 +56,91 @@ function parseOptions(options: unknown): string[] | null {
 }
 
 export async function getResourceCategories(): Promise<ResourceCategoryWithResources[]> {
-  const { db, isDatabaseConfigured } = await import("@/lib/db");
+  const { db, withDb, isDatabaseConfigured } = await import("@/lib/db");
   if (!isDatabaseConfigured()) return [];
 
-  const categories = await db.resourceCategory.findMany({
-    where: { published: true },
-    orderBy: { sortOrder: "asc" },
-    include: {
-      resources: {
-        where: { published: true },
-        orderBy: { sortOrder: "asc" },
+  return withDb(async () => {
+    const categories = await db.resourceCategory.findMany({
+      where: { published: true },
+      orderBy: { sortOrder: "asc" },
+      include: {
+        resources: {
+          where: { published: true },
+          orderBy: { sortOrder: "asc" },
+        },
       },
-    },
-  });
+    });
 
-  return categories.map((category) => ({
-    id: category.id,
-    slug: category.slug,
-    title: category.title,
-    description: category.description,
-    sortOrder: category.sortOrder,
-    resources: category.resources.map((resource) => ({
-      id: resource.id,
-      slug: resource.slug,
-      title: resource.title,
-      description: resource.description,
-      type: resource.type,
-      videoUrl: resource.videoUrl,
-      pdfPath: resource.pdfPath,
-      externalUrl: resource.externalUrl,
-      articleSlug: resource.articleSlug,
-      subsection: resource.subsection,
-      sortOrder: resource.sortOrder,
-      requestable: resource.requestable,
-    })),
-  }));
+    return categories.map((category) => ({
+      id: category.id,
+      slug: category.slug,
+      title: category.title,
+      description: category.description,
+      sortOrder: category.sortOrder,
+      resources: category.resources.map((resource) => ({
+        id: resource.id,
+        slug: resource.slug,
+        title: resource.title,
+        description: resource.description,
+        type: resource.type,
+        videoUrl: resource.videoUrl,
+        pdfPath: resource.pdfPath,
+        externalUrl: resource.externalUrl,
+        articleSlug: resource.articleSlug,
+        subsection: resource.subsection,
+        sortOrder: resource.sortOrder,
+        requestable: resource.requestable,
+      })),
+    }));
+  }, []);
 }
 
 export async function getRequestableResources(): Promise<RequestableResource[]> {
-  const { db, isDatabaseConfigured } = await import("@/lib/db");
+  const { db, withDb, isDatabaseConfigured } = await import("@/lib/db");
   if (!isDatabaseConfigured()) return [];
 
-  return db.resource.findMany({
-    where: { published: true, requestable: true },
-    orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
-    select: { slug: true, title: true },
-  });
+  return withDb(
+    () =>
+      db.resource.findMany({
+        where: { published: true, requestable: true },
+        orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+        select: { slug: true, title: true },
+      }),
+    [],
+  );
 }
 
 export async function getAssessmentBySlug(slug: string): Promise<AssessmentWithQuestions | null> {
-  const { db, isDatabaseConfigured } = await import("@/lib/db");
+  const { db, withDb, isDatabaseConfigured } = await import("@/lib/db");
   if (!isDatabaseConfigured()) return null;
 
-  const assessment = await db.assessment.findUnique({
-    where: { slug, published: true },
-    include: {
-      questions: { orderBy: { sortOrder: "asc" } },
-    },
-  });
+  return withDb(async () => {
+    const assessment = await db.assessment.findUnique({
+      where: { slug, published: true },
+      include: {
+        questions: { orderBy: { sortOrder: "asc" } },
+      },
+    });
 
-  if (!assessment || assessment.questions.length === 0) return null;
+    if (!assessment || assessment.questions.length === 0) return null;
 
-  return {
-    id: assessment.id,
-    slug: assessment.slug,
-    title: assessment.title,
-    description: assessment.description,
-    targetAge: assessment.targetAge,
-    questions: assessment.questions.map((q) => ({
-      id: q.id,
-      section: q.section,
-      sortOrder: q.sortOrder,
-      prompt: q.prompt,
-      type: q.type,
-      options: parseOptions(q.options),
-      points: q.points,
-    })),
-  };
+    return {
+      id: assessment.id,
+      slug: assessment.slug,
+      title: assessment.title,
+      description: assessment.description,
+      targetAge: assessment.targetAge,
+      questions: assessment.questions.map((q) => ({
+        id: q.id,
+        section: q.section,
+        sortOrder: q.sortOrder,
+        prompt: q.prompt,
+        type: q.type,
+        options: parseOptions(q.options),
+        points: q.points,
+      })),
+    };
+  }, null);
 }
 
 export type ScoredAnswer = {
@@ -184,46 +192,50 @@ export type ArticleItem = {
 };
 
 export async function getPublishedArticles(): Promise<ArticleItem[]> {
-  const { db, isDatabaseConfigured } = await import("@/lib/db");
+  const { db, withDb, isDatabaseConfigured } = await import("@/lib/db");
   if (!isDatabaseConfigured()) return [];
 
-  const articles = await db.article.findMany({
-    where: { published: true },
-    orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }],
-  });
+  return withDb(async () => {
+    const articles = await db.article.findMany({
+      where: { published: true },
+      orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }],
+    });
 
-  return articles.map((article) => ({
-    id: article.id,
-    slug: article.slug,
-    title: article.title,
-    description: article.description,
-    content: article.content,
-    coverImage: article.coverImage,
-    publishedAt: article.publishedAt,
-    sortOrder: article.sortOrder,
-  }));
+    return articles.map((article) => ({
+      id: article.id,
+      slug: article.slug,
+      title: article.title,
+      description: article.description,
+      content: article.content,
+      coverImage: article.coverImage,
+      publishedAt: article.publishedAt,
+      sortOrder: article.sortOrder,
+    }));
+  }, []);
 }
 
 export async function getArticleBySlug(slug: string): Promise<ArticleItem | null> {
-  const { db, isDatabaseConfigured } = await import("@/lib/db");
+  const { db, withDb, isDatabaseConfigured } = await import("@/lib/db");
   if (!isDatabaseConfigured()) return null;
 
-  const article = await db.article.findFirst({
-    where: { slug, published: true },
-  });
+  return withDb(async () => {
+    const article = await db.article.findFirst({
+      where: { slug, published: true },
+    });
 
-  if (!article) return null;
+    if (!article) return null;
 
-  return {
-    id: article.id,
-    slug: article.slug,
-    title: article.title,
-    description: article.description,
-    content: article.content,
-    coverImage: article.coverImage,
-    publishedAt: article.publishedAt,
-    sortOrder: article.sortOrder,
-  };
+    return {
+      id: article.id,
+      slug: article.slug,
+      title: article.title,
+      description: article.description,
+      content: article.content,
+      coverImage: article.coverImage,
+      publishedAt: article.publishedAt,
+      sortOrder: article.sortOrder,
+    };
+  }, null);
 }
 
 export async function resolveResourceTitle(slug: string): Promise<string | null> {

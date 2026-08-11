@@ -1,0 +1,59 @@
+# Verify on every push/PR; deploy to TMD on push to main via cPanel Git webhook.
+#
+# Setup (one-time):
+#   1. cPanel → Git Version Control → Manage (fst) → Pull or Deploy → copy Webhook URL
+#   2. GitHub → Settings → Secrets and variables → Actions → New repository secret:
+#        CPANEL_DEPLOY_WEBHOOK_URL = <full webhook URL from step 1 — not a separate token;
+#        the URL itself includes the auth hash as a query parameter>
+#   3. Do NOT also add the same URL under GitHub → Webhooks (would double-deploy).
+#
+# Server-side: repo at ~/coding/fst, .env on server, SSH deploy key in cPanel Git.
+# Deploy runs scripts/tmd-deploy.sh via .cpanel.yml. Restart Node.js app in cPanel after deploy.
+# Full guide: docs/TMD_DEPLOY.md
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run build
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/fst_ci?sslmode=disable
+          ADMIN_PASSWORD: ci-build-placeholder
+          NEXT_PUBLIC_SITE_URL: https://app.faststarttalking.com
+
+  deploy:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger cPanel deploy webhook
+        env:
+          WEBHOOK_URL: ${{ secrets.CPANEL_DEPLOY_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::warning::CPANEL_DEPLOY_WEBHOOK_URL is not set — skipping deploy."
+            echo "Add the cPanel Git webhook URL as a repository secret to enable auto-deploy."
+            echo "See docs/TMD_DEPLOY.md § Automatic deploy on GitHub push."
+            exit 0
+          fi
+          curl -fsS -X POST "$WEBHOOK_URL"
+          echo "cPanel deploy webhook triggered successfully."

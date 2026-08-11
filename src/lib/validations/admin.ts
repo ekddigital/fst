@@ -1,5 +1,6 @@
 import { BillStatus, PromotionPlacement, QuestionType, ResourceType } from "@prisma/client";
 import { z } from "zod";
+import { parseVideoUrl } from "@/lib/video-url";
 
 const slugSchema = z
   .string()
@@ -26,13 +27,31 @@ export const categoryCreateSchema = z.object({
 
 export const categoryUpdateSchema = categoryCreateSchema.partial().omit({ slug: true });
 
+const optionalVideoUrlSchema = z
+  .string()
+  .max(512)
+  .optional()
+  .nullable()
+  .superRefine((val, ctx) => {
+    if (val == null || val.trim() === "") return;
+    const parsed = parseVideoUrl(val.trim());
+    if (!parsed.ok) {
+      ctx.addIssue({ code: "custom", message: parsed.error });
+    }
+  })
+  .transform((val) => {
+    if (val == null || val.trim() === "") return null;
+    const parsed = parseVideoUrl(val.trim());
+    return parsed.ok ? parsed.normalized : val.trim();
+  });
+
 export const resourceCreateSchema = z.object({
   categoryId: z.string().min(1),
   slug: slugSchema,
   title: z.string().min(1).max(255),
   description: z.string().max(5000).optional().nullable(),
   type: z.nativeEnum(ResourceType),
-  videoUrl: z.string().max(512).optional().nullable(),
+  videoUrl: optionalVideoUrlSchema,
   pdfPath: z.string().max(512).optional().nullable(),
   externalUrl: z.string().max(512).optional().nullable(),
   articleSlug: z.string().max(191).optional().nullable(),
@@ -107,6 +126,10 @@ export const promotionCreateSchema = z.object({
 });
 
 export const promotionUpdateSchema = promotionCreateSchema.partial();
+
+export const resourceRequestStatusSchema = z.object({
+  status: z.enum(["PENDING", "SENT", "CLOSED"]),
+});
 
 export const resourceViewSchema = z.object({
   resourceId: z.string().min(1),

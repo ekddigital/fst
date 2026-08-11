@@ -1,12 +1,21 @@
-import { apiSuccess, badRequest, created } from "@/lib/api/response";
+import { apiSuccess, badRequest, validationError, created } from "@/lib/api/response";
 import { runAdminRoute } from "@/lib/api/admin-route";
+import { buildPaginationMeta, paginationSkip, parsePagination } from "@/lib/data/pagination";
 import { db } from "@/lib/db";
 import { billCreateSchema } from "@/lib/validations/admin";
 
 export async function GET(request: Request) {
-  return runAdminRoute(request, async (_req, requestId) => {
-    const bills = await db.bill.findMany({ orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }] });
-    return apiSuccess({ bills, requestId }, 200, requestId);
+  return runAdminRoute(request, async (req, requestId) => {
+    const { page, pageSize } = parsePagination(new URL(req.url).searchParams);
+    const [total, bills] = await Promise.all([
+      db.bill.count(),
+      db.bill.findMany({
+        orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+        skip: paginationSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
+    return apiSuccess({ bills, pagination: buildPaginationMeta(total, page, pageSize), requestId }, 200, requestId);
   });
 }
 
@@ -21,7 +30,7 @@ export async function POST(request: Request) {
 
     const parsed = billCreateSchema.safeParse(body);
     if (!parsed.success) {
-      return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+      return validationError(parsed.error.flatten().fieldErrors, requestId);
     }
 
     const bill = await db.bill.create({

@@ -1,4 +1,4 @@
-import { apiSuccess, badRequest, notFound } from "@/lib/api/response";
+import { apiSuccess, badRequest, validationError, notFound } from "@/lib/api/response";
 import { runAdminRoute } from "@/lib/api/admin-route";
 import { db } from "@/lib/db";
 import { billUpdateSchema } from "@/lib/validations/admin";
@@ -15,7 +15,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const parsed = billUpdateSchema.safeParse(body);
     if (!parsed.success) {
-      return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+      return validationError(parsed.error.flatten().fieldErrors, requestId);
     }
 
     const existing = await db.bill.findUnique({ where: { id } });

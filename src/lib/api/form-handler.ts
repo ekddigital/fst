@@ -7,6 +7,7 @@ import {
   serverError,
   serviceUnavailable,
   tooManyRequests,
+  validationError,
 } from "@/lib/api/response";
 import { checkRateLimit, rateLimitKey } from "@/lib/api/rate-limit";
 import { validatePostRequest } from "@/lib/api/request-guard";
@@ -44,7 +45,7 @@ export async function handleFormPost<T extends z.ZodType>(
 
   const parsed = options.schema.safeParse(body);
   if (!parsed.success) {
-    return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+    return validationError(parsed.error.flatten().fieldErrors, requestId);
   }
 
   if (!isDatabaseConfigured()) {

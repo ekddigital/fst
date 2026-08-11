@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { adminFetch, slugify, swapIds } from "@/lib/admin/client";
+import { adminNotifyError, formatAdminErrorMessage } from "@/lib/admin/api-feedback";
+import { AdminFormErrors } from "@/components/admin/admin-form-errors";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { ButtonLoadingContent, LoadingInline } from "@/components/ui/loading-inline";
 
@@ -67,13 +69,15 @@ export default function AdminAssessmentsPage() {
   const [assessmentForm, setAssessmentForm] = useState(emptyAssessment);
   const [questionForm, setQuestionForm] = useState(emptyQuestion);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>();
   const [deleteAssessment, setDeleteAssessment] = useState<Assessment | null>(null);
   const [deleteQuestion, setDeleteQuestion] = useState<Question | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadAssessments = useCallback(async () => {
     const res = await adminFetch<{ assessments: Assessment[] }>("/api/admin/assessments");
     if (res.success) setAssessments(res.data.assessments);
-    else toast.error(res.error.message);
+    else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     setLoading(false);
   }, []);
 
@@ -81,7 +85,7 @@ export default function AdminAssessmentsPage() {
     setQuestionsLoading(true);
     const res = await adminFetch<{ questions: Question[] }>(`/api/admin/assessments/${assessmentId}/questions`);
     if (res.success) setQuestions(res.data.questions);
-    else toast.error(res.error.message);
+    else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     setQuestionsLoading(false);
   }, []);
 
@@ -102,6 +106,7 @@ export default function AdminAssessmentsPage() {
   function openAssessmentCreate() {
     setEditingAssessment(null);
     setAssessmentForm(emptyAssessment);
+    setFieldErrors(undefined);
     setAssessmentDialog(true);
   }
 
@@ -114,11 +119,13 @@ export default function AdminAssessmentsPage() {
       targetAge: assessment.targetAge ?? "",
       published: assessment.published,
     });
+    setFieldErrors(undefined);
     setAssessmentDialog(true);
   }
 
   async function saveAssessment() {
     setSaving(true);
+    setFieldErrors(undefined);
     const payload = {
       slug: assessmentForm.slug || slugify(assessmentForm.title),
       title: assessmentForm.title,
@@ -141,7 +148,7 @@ export default function AdminAssessmentsPage() {
 
     setSaving(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      setFieldErrors(adminNotifyError(res));
       return;
     }
     toast.success(editingAssessment ? "Assessment updated" : "Assessment created");
@@ -151,9 +158,11 @@ export default function AdminAssessmentsPage() {
 
   async function confirmDeleteAssessment() {
     if (!deleteAssessment) return;
+    setDeleting(true);
     const res = await adminFetch(`/api/admin/assessments/${deleteAssessment.id}`, { method: "DELETE" });
+    setDeleting(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     toast.success("Assessment deleted");
@@ -166,6 +175,7 @@ export default function AdminAssessmentsPage() {
     if (!expandedId) return;
     setEditingQuestion(null);
     setQuestionForm(emptyQuestion);
+    setFieldErrors(undefined);
     setQuestionDialog(true);
   }
 
@@ -182,12 +192,14 @@ export default function AdminAssessmentsPage() {
       correctAnswer: question.correctAnswer ?? "",
       points: question.points,
     });
+    setFieldErrors(undefined);
     setQuestionDialog(true);
   }
 
   async function saveQuestion() {
     if (!expandedId) return;
     setSaving(true);
+    setFieldErrors(undefined);
     const options = questionForm.optionsText
       .split("\n")
       .map((line) => line.trim())
@@ -214,7 +226,7 @@ export default function AdminAssessmentsPage() {
 
     setSaving(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      setFieldErrors(adminNotifyError(res));
       return;
     }
     toast.success(editingQuestion ? "Question updated" : "Question added");
@@ -225,11 +237,13 @@ export default function AdminAssessmentsPage() {
 
   async function confirmDeleteQuestion() {
     if (!expandedId || !deleteQuestion) return;
+    setDeleting(true);
     const res = await adminFetch(`/api/admin/assessments/${expandedId}/questions/${deleteQuestion.id}`, {
       method: "DELETE",
     });
+    setDeleting(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     toast.success("Question deleted");
@@ -252,7 +266,7 @@ export default function AdminAssessmentsPage() {
       },
     );
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     setQuestions(res.data.questions);
@@ -362,6 +376,7 @@ export default function AdminAssessmentsPage() {
             <DialogTitle>{editingAssessment ? "Edit assessment" : "New assessment"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <AdminFormErrors errors={fieldErrors} />
             <div className="space-y-2">
               <Label>Title</Label>
               <Input
@@ -425,6 +440,7 @@ export default function AdminAssessmentsPage() {
             <DialogTitle>{editingQuestion ? "Edit question" : "New question"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <AdminFormErrors errors={fieldErrors} />
             <div className="space-y-2">
               <Label>Section</Label>
               <Input
@@ -501,8 +517,13 @@ export default function AdminAssessmentsPage() {
             <Button variant="outline" onClick={() => setDeleteAssessment(null)}>
               Cancel
             </Button>
-            <Button className="bg-destructive hover:bg-destructive/90" onClick={() => void confirmDeleteAssessment()}>
-              Delete
+            <Button
+              variant="default"
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={() => void confirmDeleteAssessment()}
+            >
+              <ButtonLoadingContent loading={deleting} loadingText="Deleting…" idleText="Delete" />
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -517,8 +538,13 @@ export default function AdminAssessmentsPage() {
             <Button variant="outline" onClick={() => setDeleteQuestion(null)}>
               Cancel
             </Button>
-            <Button className="bg-destructive hover:bg-destructive/90" onClick={() => void confirmDeleteQuestion()}>
-              Delete
+            <Button
+              variant="default"
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={() => void confirmDeleteQuestion()}
+            >
+              <ButtonLoadingContent loading={deleting} loadingText="Deleting…" idleText="Delete" />
             </Button>
           </DialogFooter>
         </DialogContent>

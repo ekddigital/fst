@@ -1,12 +1,25 @@
-import { apiSuccess, badRequest, created } from "@/lib/api/response";
+import { apiSuccess, badRequest, validationError, created } from "@/lib/api/response";
 import { runAdminRoute } from "@/lib/api/admin-route";
+import { buildPaginationMeta, paginationSkip, parsePagination } from "@/lib/data/pagination";
 import { db } from "@/lib/db";
 import { promotionCreateSchema } from "@/lib/validations/admin";
 
 export async function GET(request: Request) {
-  return runAdminRoute(request, async (_req, requestId) => {
-    const promotions = await db.promotion.findMany({ orderBy: { createdAt: "desc" } });
-    return apiSuccess({ promotions, requestId }, 200, requestId);
+  return runAdminRoute(request, async (req, requestId) => {
+    const { page, pageSize } = parsePagination(new URL(req.url).searchParams);
+    const [total, promotions] = await Promise.all([
+      db.promotion.count(),
+      db.promotion.findMany({
+        orderBy: { createdAt: "desc" },
+        skip: paginationSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
+    return apiSuccess(
+      { promotions, pagination: buildPaginationMeta(total, page, pageSize), requestId },
+      200,
+      requestId,
+    );
   });
 }
 
@@ -21,7 +34,7 @@ export async function POST(request: Request) {
 
     const parsed = promotionCreateSchema.safeParse(body);
     if (!parsed.success) {
-      return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+      return validationError(parsed.error.flatten().fieldErrors, requestId);
     }
 
     const promotion = await db.promotion.create({

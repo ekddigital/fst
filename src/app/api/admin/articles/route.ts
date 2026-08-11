@@ -1,14 +1,27 @@
-import { apiSuccess, badRequest, created } from "@/lib/api/response";
+import { apiSuccess, badRequest, validationError, created } from "@/lib/api/response";
 import { runAdminRoute } from "@/lib/api/admin-route";
+import { buildPaginationMeta, paginationSkip, parsePagination } from "@/lib/data/pagination";
 import { db } from "@/lib/db";
 import { articleCreateSchema } from "@/lib/validations/admin";
 
 export async function GET(request: Request) {
-  return runAdminRoute(request, async (_req, requestId) => {
-    const articles = await db.article.findMany({
-      orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }],
-    });
-    return apiSuccess({ articles, requestId }, 200, requestId);
+  return runAdminRoute(request, async (req, requestId) => {
+    const { page, pageSize } = parsePagination(new URL(req.url).searchParams);
+    const where = {};
+    const [total, articles] = await Promise.all([
+      db.article.count({ where }),
+      db.article.findMany({
+        where,
+        orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }],
+        skip: paginationSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
+    return apiSuccess(
+      { articles, pagination: buildPaginationMeta(total, page, pageSize), requestId },
+      200,
+      requestId,
+    );
   });
 }
 
@@ -23,7 +36,7 @@ export async function POST(request: Request) {
 
     const parsed = articleCreateSchema.safeParse(body);
     if (!parsed.success) {
-      return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+      return validationError(parsed.error.flatten().fieldErrors, requestId);
     }
 
     const maxOrder = await db.article.aggregate({ _max: { sortOrder: true } });

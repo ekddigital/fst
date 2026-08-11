@@ -21,9 +21,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch, slugify, swapIds } from "@/lib/admin/client";
+import { adminNotifyError, formatAdminErrorMessage } from "@/lib/admin/api-feedback";
+import { AdminFormErrors } from "@/components/admin/admin-form-errors";
 import { AdminTableSkeleton } from "@/components/ui/skeleton";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { ButtonLoadingContent } from "@/components/ui/loading-inline";
+import { AdminPagination } from "@/components/admin/admin-pagination";
+import { FileUploadField } from "@/components/admin/file-upload-field";
+import { VideoInputField } from "@/components/admin/video-input-field";
+import type { PaginationMeta } from "@/lib/data/pagination";
 
 type Category = { id: string; title: string; slug: string };
 type Resource = {
@@ -66,24 +72,33 @@ export default function AdminResourcesPage() {
   const searchParams = useSearchParams();
   const [categories, setCategories] = useState<Category[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [pagination, setPagination] = useState<PaginationMeta>({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [page, setPage] = useState(1);
   const [filterCategoryId, setFilterCategoryId] = useState("");
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Resource | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>();
   const [deleteTarget, setDeleteTarget] = useState<Resource | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadCategories = useCallback(async () => {
     const res = await adminFetch<{ categories: Category[] }>("/api/admin/categories");
     if (res.success) setCategories(res.data.categories);
   }, []);
 
-  const loadResources = useCallback(async (categoryId?: string) => {
-    const qs = categoryId ? `?categoryId=${categoryId}` : "";
-    const res = await adminFetch<{ resources: Resource[] }>(`/api/admin/resources${qs}`);
-    if (res.success) setResources(res.data.resources);
-    else toast.error(res.error.message);
+  const loadResources = useCallback(async (categoryId?: string, pageNum = 1) => {
+    const params = new URLSearchParams({ page: String(pageNum), pageSize: "20" });
+    if (categoryId) params.set("categoryId", categoryId);
+    const res = await adminFetch<{ resources: Resource[]; pagination: PaginationMeta }>(
+      `/api/admin/resources?${params}`,
+    );
+    if (res.success) {
+      setResources(res.data.resources);
+      setPagination(res.data.pagination);
+    } else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     setLoading(false);
   }, []);
 
@@ -92,8 +107,12 @@ export default function AdminResourcesPage() {
   }, [loadCategories]);
 
   useEffect(() => {
-    void loadResources(filterCategoryId || undefined);
-  }, [filterCategoryId, loadResources]);
+    setPage(1);
+  }, [filterCategoryId]);
+
+  useEffect(() => {
+    void loadResources(filterCategoryId || undefined, page);
+  }, [filterCategoryId, page, loadResources]);
 
   useEffect(() => {
     if (searchParams.get("new") === "1" && categories.length > 0) openCreate();
@@ -102,6 +121,7 @@ export default function AdminResourcesPage() {
   function openCreate() {
     setEditing(null);
     setForm({ ...emptyForm, categoryId: filterCategoryId || categories[0]?.id || "" });
+    setFieldErrors(undefined);
     setDialogOpen(true);
   }
 
@@ -121,11 +141,13 @@ export default function AdminResourcesPage() {
       published: resource.published,
       requestable: resource.requestable,
     });
+    setFieldErrors(undefined);
     setDialogOpen(true);
   }
 
   async function save() {
     setSaving(true);
+    setFieldErrors(undefined);
     const payload = {
       categoryId: form.categoryId,
       slug: form.slug || slugify(form.title),
@@ -161,24 +183,26 @@ export default function AdminResourcesPage() {
 
     setSaving(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      setFieldErrors(adminNotifyError(res));
       return;
     }
     toast.success(editing ? "Resource updated" : "Resource created");
     setDialogOpen(false);
-    await loadResources(filterCategoryId || undefined);
+    await loadResources(filterCategoryId || undefined, page);
   }
 
   async function confirmDelete() {
     if (!deleteTarget) return;
+    setDeleting(true);
     const res = await adminFetch(`/api/admin/resources/${deleteTarget.id}`, { method: "DELETE" });
+    setDeleting(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     toast.success("Resource deleted");
     setDeleteTarget(null);
-    await loadResources(filterCategoryId || undefined);
+    await loadResources(filterCategoryId || undefined, page);
   }
 
   async function reorder(resourceId: string, direction: "up" | "down") {
@@ -195,10 +219,10 @@ export default function AdminResourcesPage() {
       body: JSON.stringify({ categoryId, ids: next }),
     });
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
-    await loadResources(filterCategoryId || undefined);
+    await loadResources(filterCategoryId || undefined, page);
   }
 
   const filtered = filterCategoryId ? resources.filter((r) => r.categoryId === filterCategoryId) : resources;
@@ -295,12 +319,17 @@ export default function AdminResourcesPage() {
         </TableBody>
       </Table>
 
+      <AdminPagination pagination={pagination} onPageChange={setPage} />
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit resource" : "New resource"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <AdminFormErrors errors={fieldErrors} />
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Category</Label>
               <select
@@ -368,21 +397,19 @@ export default function AdminResourcesPage() {
               </select>
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label>Video URL / path</Label>
-              <Input
-                placeholder="/videos/example.mp4 or https://..."
+              <VideoInputField
                 value={form.videoUrl}
-                onChange={(e) => setForm((f) => ({ ...f, videoUrl: e.target.value }))}
+                onChange={(url) => setForm((f) => ({ ...f, videoUrl: url }))}
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label>PDF path</Label>
-              <Input
-                placeholder="/other/document.pdf"
+              <FileUploadField
+                label="PDF or document"
                 value={form.pdfPath}
-                onChange={(e) => setForm((f) => ({ ...f, pdfPath: e.target.value }))}
+                onChange={(url) => setForm((f) => ({ ...f, pdfPath: url }))}
+                kind="other"
+                hint="Upload a PDF/Word file or paste a path under /other/"
               />
-              <p className="text-xs text-muted-foreground">Place files in public/ or use an external URL in External URL.</p>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>External URL</Label>
@@ -430,8 +457,13 @@ export default function AdminResourcesPage() {
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button className="bg-destructive hover:bg-destructive/90" onClick={() => void confirmDelete()}>
-              Delete
+            <Button
+              variant="default"
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              <ButtonLoadingContent loading={deleting} loadingText="Deleting…" idleText="Delete" />
             </Button>
           </DialogFooter>
         </DialogContent>

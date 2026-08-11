@@ -11,14 +11,12 @@ import {
   FolderOpen,
   GraduationCap,
   LayoutDashboard,
-  LogOut,
   Megaphone,
   MessageSquare,
   Newspaper,
   Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BRAND, LOGO } from "@/lib/brand";
 import { adminFetch } from "@/lib/admin/client";
@@ -54,13 +52,8 @@ export function AdminNav() {
     });
   }, [pathname]);
 
-  async function logout() {
-    await fetch("/api/admin/auth/logout", { method: "POST", credentials: "include" });
-    window.location.href = "/admin/login";
-  }
-
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r bg-card">
+    <aside className="sticky top-0 flex h-screen w-72 shrink-0 flex-col border-r bg-card">
       <div className="flex items-center gap-3 border-b px-5 py-4">
         <img src={LOGO.sm} alt="" className="size-10 rounded-lg" />
         <div>
@@ -98,12 +91,6 @@ export function AdminNav() {
           );
         })}
       </nav>
-      <div className="border-t p-3">
-        <Button variant="ghost" className="w-full justify-start gap-2" onClick={logout}>
-          <LogOut className="size-4" />
-          Log out
-        </Button>
-      </div>
     </aside>
   );
 }

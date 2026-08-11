@@ -20,9 +20,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch } from "@/lib/admin/client";
+import { adminNotifyError, formatAdminErrorMessage } from "@/lib/admin/api-feedback";
+import { AdminFormErrors } from "@/components/admin/admin-form-errors";
 import { AdminTableSkeleton } from "@/components/ui/skeleton";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { ButtonLoadingContent } from "@/components/ui/loading-inline";
+import { AdminPagination } from "@/components/admin/admin-pagination";
+import type { PaginationMeta } from "@/lib/data/pagination";
 
 type BillStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELLED";
 
@@ -71,23 +75,31 @@ function formatDate(value: string | null) {
 export default function AdminBillsPage() {
   const searchParams = useSearchParams();
   const [bills, setBills] = useState<Bill[]>([]);
+  const [pagination, setPagination] = useState<PaginationMeta>({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Bill | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>();
   const [deleteTarget, setDeleteTarget] = useState<Bill | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(async () => {
-    const res = await adminFetch<{ bills: Bill[] }>("/api/admin/bills");
-    if (res.success) setBills(res.data.bills);
-    else toast.error(res.error.message);
+  const load = useCallback(async (pageNum: number) => {
+    const res = await adminFetch<{ bills: Bill[]; pagination: PaginationMeta }>(
+      `/api/admin/bills?page=${pageNum}&pageSize=20`,
+    );
+    if (res.success) {
+      setBills(res.data.bills);
+      setPagination(res.data.pagination);
+    } else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(page);
+  }, [load, page]);
 
   useEffect(() => {
     if (searchParams.get("new") === "1") {
@@ -100,6 +112,7 @@ export default function AdminBillsPage() {
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
+    setFieldErrors(undefined);
     setDialogOpen(true);
   }
 
@@ -112,11 +125,13 @@ export default function AdminBillsPage() {
       dueDate: bill.dueDate ? bill.dueDate.slice(0, 10) : "",
       notes: bill.notes ?? "",
     });
+    setFieldErrors(undefined);
     setDialogOpen(true);
   }
 
   async function save() {
     setSaving(true);
+    setFieldErrors(undefined);
     const payload = {
       description: form.description,
       amount: parseFloat(form.amount),
@@ -131,24 +146,26 @@ export default function AdminBillsPage() {
 
     setSaving(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      setFieldErrors(adminNotifyError(res));
       return;
     }
     toast.success(editing ? "Bill updated" : "Bill added");
     setDialogOpen(false);
-    await load();
+    await load(page);
   }
 
   async function confirmDelete() {
     if (!deleteTarget) return;
+    setDeleting(true);
     const res = await adminFetch(`/api/admin/bills/${deleteTarget.id}`, { method: "DELETE" });
+    setDeleting(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     toast.success("Bill deleted");
     setDeleteTarget(null);
-    await load();
+    await load(page);
   }
 
   const pendingTotal = bills
@@ -231,12 +248,15 @@ export default function AdminBillsPage() {
         </Table>
       )}
 
+      <AdminPagination pagination={pagination} onPageChange={setPage} />
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editing ? "Edit bill" : "Add bill"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4">
+            <AdminFormErrors errors={fieldErrors} />
             <div className="space-y-2">
               <Label>Description</Label>
               <Input
@@ -312,8 +332,13 @@ export default function AdminBillsPage() {
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button className="bg-destructive hover:bg-destructive/90" onClick={() => void confirmDelete()}>
-              Delete
+            <Button
+              variant="default"
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              <ButtonLoadingContent loading={deleting} loadingText="Deleting…" idleText="Delete" />
             </Button>
           </DialogFooter>
         </DialogContent>

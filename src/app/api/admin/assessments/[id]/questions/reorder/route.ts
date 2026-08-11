@@ -1,4 +1,4 @@
-import { apiSuccess, badRequest, notFound } from "@/lib/api/response";
+import { apiSuccess, badRequest, validationError, notFound } from "@/lib/api/response";
 import { runAdminRoute } from "@/lib/api/admin-route";
 import { reorderByIds } from "@/lib/data/reorder";
 import { db } from "@/lib/db";
@@ -22,7 +22,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const parsed = reorderIdsSchema.safeParse(body);
     if (!parsed.success) {
-      return badRequest("Validation failed", parsed.error.flatten().fieldErrors, requestId);
+      return validationError(parsed.error.flatten().fieldErrors, requestId);
     }
 
     const existing = await db.assessmentQuestion.findMany({

@@ -29,13 +29,16 @@ export default async function ProgramDetailPage({ params }: Props) {
   if (!program) notFound();
 
   const page = await getArchivePage(program.archiveSlug);
-  if (!page) notFound();
 
   return (
     <>
-      <PageHero title={page.title} description={page.description || program.summary} />
+      <PageHero title={page?.title ?? program.title} description={page?.description || program.summary} />
       <ContentSection narrow>
-        <MarkdownContent content={page.body} />
+        {page ? (
+          <MarkdownContent content={page.body} />
+        ) : (
+          <p className="text-lg leading-relaxed text-muted-foreground">{program.summary}</p>
+        )}
       </ContentSection>
     </>
   );

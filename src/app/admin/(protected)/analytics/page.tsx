@@ -6,6 +6,7 @@ import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { SubmissionTrendChart, WatchTimeBarChart } from "@/components/admin/dashboard-charts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { adminFetch } from "@/lib/admin/client";
+import { formatAdminErrorMessage } from "@/lib/admin/api-feedback";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 
 type AnalyticsData = {
@@ -38,7 +39,7 @@ export default function AdminAnalyticsPage() {
   const load = useCallback(async () => {
     const res = await adminFetch<AnalyticsData>("/api/admin/analytics");
     if (res.success) setData(res.data);
-    else toast.error(res.error.message);
+    else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     setLoading(false);
   }, []);
 

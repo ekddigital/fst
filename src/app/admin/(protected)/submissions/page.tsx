@@ -1,13 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ClipboardList, Inbox, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AdminEmptyState } from "@/components/admin/admin-empty-state";
+import { AdminPagination } from "@/components/admin/admin-pagination";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch } from "@/lib/admin/client";
+import { formatAdminErrorMessage } from "@/lib/admin/api-feedback";
 import { AdminTableSkeleton } from "@/components/ui/skeleton";
 import { LoadingScreen } from "@/components/ui/loading-screen";
+import type { PaginationMeta } from "@/lib/data/pagination";
 
 type Tab = "resources" | "assessments" | "contact";
 
@@ -41,38 +47,72 @@ type ContactSubmission = {
   createdAt: string;
 };
 
+const RESOURCE_STATUS = ["PENDING", "SENT", "CLOSED"] as const;
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
 
 export default function AdminSubmissionsPage() {
   const [tab, setTab] = useState<Tab>("resources");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
   const [loading, setLoading] = useState(true);
   const [resourceRequests, setResourceRequests] = useState<ResourceRequest[]>([]);
   const [assessmentSubmissions, setAssessmentSubmissions] = useState<AssessmentSubmission[]>([]);
   const [contactSubmissions, setContactSubmissions] = useState<ContactSubmission[]>([]);
 
-  const load = useCallback(async (activeTab: Tab) => {
+  const load = useCallback(async (activeTab: Tab, pageNum: number) => {
     setLoading(true);
+    const qs = `?page=${pageNum}&pageSize=20`;
     if (activeTab === "resources") {
-      const res = await adminFetch<{ requests: ResourceRequest[] }>("/api/admin/resource-requests");
-      if (res.success) setResourceRequests(res.data.requests);
-      else toast.error(res.error.message);
+      const res = await adminFetch<{ requests: ResourceRequest[]; pagination: PaginationMeta }>(
+        `/api/admin/resource-requests${qs}`,
+      );
+      if (res.success) {
+        setResourceRequests(res.data.requests);
+        setPagination(res.data.pagination);
+      } else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     } else if (activeTab === "assessments") {
-      const res = await adminFetch<{ submissions: AssessmentSubmission[] }>("/api/admin/assessment-submissions");
-      if (res.success) setAssessmentSubmissions(res.data.submissions);
-      else toast.error(res.error.message);
+      const res = await adminFetch<{ submissions: AssessmentSubmission[]; pagination: PaginationMeta }>(
+        `/api/admin/assessment-submissions${qs}`,
+      );
+      if (res.success) {
+        setAssessmentSubmissions(res.data.submissions);
+        setPagination(res.data.pagination);
+      } else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     } else {
-      const res = await adminFetch<{ submissions: ContactSubmission[] }>("/api/admin/contact-submissions");
-      if (res.success) setContactSubmissions(res.data.submissions);
-      else toast.error(res.error.message);
+      const res = await adminFetch<{ submissions: ContactSubmission[]; pagination: PaginationMeta }>(
+        `/api/admin/contact-submissions${qs}`,
+      );
+      if (res.success) {
+        setContactSubmissions(res.data.submissions);
+        setPagination(res.data.pagination);
+      } else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    void load(tab);
-  }, [tab, load]);
+    setPage(1);
+  }, [tab]);
+
+  useEffect(() => {
+    void load(tab, page);
+  }, [tab, page, load]);
+
+  async function updateRequestStatus(id: string, status: (typeof RESOURCE_STATUS)[number]) {
+    const res = await adminFetch(`/api/admin/resource-requests/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    if (!res.success) {
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
+      return;
+    }
+    toast.success("Status updated");
+    await load(tab, page);
+  }
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "resources", label: "Resource requests" },
@@ -109,79 +149,124 @@ export default function AdminSubmissionsPage() {
           <AdminTableSkeleton rows={6} columns={5} />
         </div>
       ) : tab === "resources" ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Resource</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {resourceRequests.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="whitespace-nowrap text-xs">{formatDate(row.createdAt)}</TableCell>
-                <TableCell>{row.fullName}</TableCell>
-                <TableCell>{row.email}</TableCell>
-                <TableCell>{row.resourceTitle}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">{row.status}</Badge>
-                </TableCell>
+        <>
+          {resourceRequests.length === 0 ? (
+            <AdminEmptyState
+              icon={Inbox}
+              title="No resource requests yet"
+              description="When parents request downloadable resources from the site, they will appear here."
+            />
+          ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Resource</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {resourceRequests.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="whitespace-nowrap text-xs">{formatDate(row.createdAt)}</TableCell>
+                  <TableCell>{row.fullName}</TableCell>
+                  <TableCell>{row.email}</TableCell>
+                  <TableCell>{row.resourceTitle}</TableCell>
+                  <TableCell>
+                    <select
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={row.status}
+                      onChange={(e) =>
+                        void updateRequestStatus(row.id, e.target.value as (typeof RESOURCE_STATUS)[number])
+                      }
+                    >
+                      {RESOURCE_STATUS.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          )}
+          <AdminPagination pagination={pagination} onPageChange={setPage} />
+        </>
       ) : tab === "assessments" ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Student</TableHead>
-              <TableHead>Parent email</TableHead>
-              <TableHead>Assessment</TableHead>
-              <TableHead>Score</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {assessmentSubmissions.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="whitespace-nowrap text-xs">{formatDate(row.createdAt)}</TableCell>
-                <TableCell>
-                  {row.studentName}
-                  {row.age != null && <span className="text-muted-foreground"> ({row.age})</span>}
-                </TableCell>
-                <TableCell>{row.parentEmail ?? "—"}</TableCell>
-                <TableCell>{row.assessment.title}</TableCell>
-                <TableCell>
-                  {row.score != null && row.maxScore != null ? `${row.score}/${row.maxScore}` : "—"}
-                </TableCell>
+        <>
+          {assessmentSubmissions.length === 0 ? (
+            <AdminEmptyState
+              icon={ClipboardList}
+              title="No assessment submissions yet"
+              description="When students complete an assessment on the site, their results will show up here."
+            />
+          ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Student</TableHead>
+                <TableHead>Parent email</TableHead>
+                <TableHead>Assessment</TableHead>
+                <TableHead>Score</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {assessmentSubmissions.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="whitespace-nowrap text-xs">{formatDate(row.createdAt)}</TableCell>
+                  <TableCell>
+                    {row.studentName}
+                    {row.age != null && <span className="text-muted-foreground"> ({row.age})</span>}
+                  </TableCell>
+                  <TableCell>{row.parentEmail ?? "—"}</TableCell>
+                  <TableCell>{row.assessment.title}</TableCell>
+                  <TableCell>
+                    {row.score != null && row.maxScore != null ? `${row.score}/${row.maxScore}` : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          )}
+          <AdminPagination pagination={pagination} onPageChange={setPage} />
+        </>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Message</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {contactSubmissions.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="whitespace-nowrap text-xs">{formatDate(row.createdAt)}</TableCell>
-                <TableCell>{row.name}</TableCell>
-                <TableCell>{row.email}</TableCell>
-                <TableCell className="max-w-md truncate">{row.message}</TableCell>
+        <>
+          {contactSubmissions.length === 0 ? (
+            <AdminEmptyState
+              icon={Mail}
+              title="No contact messages yet"
+              description="When parents send a message through the contact form, it will appear here."
+            />
+          ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Message</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {contactSubmissions.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="whitespace-nowrap text-xs">{formatDate(row.createdAt)}</TableCell>
+                  <TableCell>{row.name}</TableCell>
+                  <TableCell>{row.email}</TableCell>
+                  <TableCell className="max-w-md truncate">{row.message}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          )}
+          <AdminPagination pagination={pagination} onPageChange={setPage} />
+        </>
       )}
     </div>
   );

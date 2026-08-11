@@ -22,9 +22,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch, getArticleImageFromMarkdown, slugify, swapIds } from "@/lib/admin/client";
+import { adminNotifyError, formatAdminErrorMessage } from "@/lib/admin/api-feedback";
+import { AdminFormErrors } from "@/components/admin/admin-form-errors";
 import { AdminTableSkeleton } from "@/components/ui/skeleton";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { ButtonLoadingContent } from "@/components/ui/loading-inline";
+import { AdminPagination } from "@/components/admin/admin-pagination";
+import { FileUploadField } from "@/components/admin/file-upload-field";
+import type { PaginationMeta } from "@/lib/data/pagination";
 
 type Article = {
   id: string;
@@ -50,23 +55,31 @@ const emptyForm = {
 export default function AdminArticlesPage() {
   const searchParams = useSearchParams();
   const [articles, setArticles] = useState<Article[]>([]);
+  const [pagination, setPagination] = useState<PaginationMeta>({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Article | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>();
   const [deleteTarget, setDeleteTarget] = useState<Article | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(async () => {
-    const res = await adminFetch<{ articles: Article[] }>("/api/admin/articles");
-    if (res.success) setArticles(res.data.articles);
-    else toast.error(res.error.message);
+  const load = useCallback(async (pageNum: number) => {
+    const res = await adminFetch<{ articles: Article[]; pagination: PaginationMeta }>(
+      `/api/admin/articles?page=${pageNum}&pageSize=20`,
+    );
+    if (res.success) {
+      setArticles(res.data.articles);
+      setPagination(res.data.pagination);
+    } else toast.error(formatAdminErrorMessage(res.error, res.requestId));
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(page);
+  }, [load, page]);
 
   useEffect(() => {
     if (searchParams.get("new") === "1") openCreate();
@@ -75,6 +88,7 @@ export default function AdminArticlesPage() {
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
+    setFieldErrors(undefined);
     setDialogOpen(true);
   }
 
@@ -88,11 +102,13 @@ export default function AdminArticlesPage() {
       coverImage: article.coverImage ?? "",
       published: article.published,
     });
+    setFieldErrors(undefined);
     setDialogOpen(true);
   }
 
   async function save() {
     setSaving(true);
+    setFieldErrors(undefined);
     const slug = form.slug || slugify(form.title);
     const coverImage = form.coverImage || getArticleImageFromMarkdown(form.content) || null;
 
@@ -120,24 +136,26 @@ export default function AdminArticlesPage() {
 
     setSaving(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      setFieldErrors(adminNotifyError(res));
       return;
     }
     toast.success(editing ? "Article updated" : "Article created");
     setDialogOpen(false);
-    await load();
+    await load(page);
   }
 
   async function confirmDelete() {
     if (!deleteTarget) return;
+    setDeleting(true);
     const res = await adminFetch(`/api/admin/articles/${deleteTarget.id}`, { method: "DELETE" });
+    setDeleting(false);
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     toast.success("Article deleted");
     setDeleteTarget(null);
-    await load();
+    await load(page);
   }
 
   async function reorder(articleId: string, direction: "up" | "down") {
@@ -150,7 +168,7 @@ export default function AdminArticlesPage() {
       body: JSON.stringify({ ids: next }),
     });
     if (!res.success) {
-      toast.error(res.error.message);
+      toast.error(formatAdminErrorMessage(res.error, res.requestId));
       return;
     }
     setArticles(res.data.articles);
@@ -238,12 +256,15 @@ export default function AdminArticlesPage() {
       </Table>
       )}
 
+      <AdminPagination pagination={pagination} onPageChange={setPage} />
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit article" : "New article"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4">
+            <AdminFormErrors errors={fieldErrors} />
             <div className="space-y-2">
               <Label>Title</Label>
               <Input
@@ -273,15 +294,13 @@ export default function AdminArticlesPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Cover image URL</Label>
-              <Input
-                placeholder="/images/example.webp"
+              <FileUploadField
+                label="Cover image"
                 value={form.coverImage}
-                onChange={(e) => setForm((f) => ({ ...f, coverImage: e.target.value }))}
+                onChange={(url) => setForm((f) => ({ ...f, coverImage: url }))}
+                kind="images"
+                hint="Pick an image to upload, or paste a URL. Auto-detected from markdown if left blank."
               />
-              <p className="text-xs text-muted-foreground">
-                Optional. Auto-detected from the first markdown image in content if left blank.
-              </p>
             </div>
             <div className="space-y-2">
               <Label>Content (Markdown)</Label>
@@ -322,8 +341,13 @@ export default function AdminArticlesPage() {
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button className="bg-destructive hover:bg-destructive/90" onClick={() => void confirmDelete()}>
-              Delete
+            <Button
+              variant="default"
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              <ButtonLoadingContent loading={deleting} loadingText="Deleting…" idleText="Delete" />
             </Button>
           </DialogFooter>
         </DialogContent>

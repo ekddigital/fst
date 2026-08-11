@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ExternalLink, Play } from "lucide-react";
 import type { ResourceItem } from "@/lib/data/catalog";
 import { PdfDocumentCard } from "@/components/content/pdf-document-card";
-import { TrackedVideo } from "@/components/content/tracked-video";
+import { VideoPlayer } from "@/components/content/video-player";
 import { WordDocumentCard } from "@/components/content/word-document-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ export function ResourceCard({ resource }: { resource: ResourceItem }) {
     return (
       <Card className="overflow-hidden transition-shadow hover:shadow-md">
         <div className="aspect-video bg-muted">
-          <TrackedVideo
+          <VideoPlayer
             resourceId={resource.id}
             videoUrl={resource.videoUrl}
             title={resource.title}
