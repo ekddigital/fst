@@ -771,6 +771,8 @@ For Terminal seed/build, use **`./scripts/tmd-deploy.sh`** — it runs under `en
 
 CloudLinux LVE can block `npm run build` or `git pull` when too many processes are open (extra SSH sessions, IDE remote terminals, stuck `node`/`npm`).
 
+The deploy script uses PATH-only nodevenv setup (no `source activate`) to reduce forks.
+
 **Fix:**
 
 1. Close extra SSH sessions and SFTP clients connected to the account.

@@ -10,9 +10,9 @@
 set -euo pipefail
 
 DEPLOYPATH="${DEPLOYPATH:-/home/faststar/coding/fst}"
-NODEVENV_ACTIVATE="${NODEVENV_ACTIVATE:-/home/faststar/nodevenv/coding/fst/22/bin/activate}"
 ENV_FILE="${ENV_FILE:-$DEPLOYPATH/.env}"
 NODE_BIN="/home/faststar/nodevenv/coding/fst/22/bin"
+NODE_MODULES="/home/faststar/nodevenv/coding/fst/22/lib/node_modules"
 TMD_SKIP_GIT_PULL="${TMD_SKIP_GIT_PULL:-0}"
 TMD_SKIP_SEED="${TMD_SKIP_SEED:-0}"
 
@@ -28,9 +28,8 @@ if [[ "$TMD_SKIP_GIT_PULL" != "1" ]]; then
   git pull origin main
 fi
 
-# shellcheck source=/dev/null
-source "$NODEVENV_ACTIVATE"
 export PATH="${NODE_BIN}:$PATH"
+export NODE_PATH="${NODE_MODULES}"
 export NPM_CONFIG_PRODUCTION=false
 
 if [[ -f package-lock.json ]]; then
