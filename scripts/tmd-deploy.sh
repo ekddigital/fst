@@ -305,9 +305,8 @@ prune_old_releases() {
   done
 }
 
-passenger_restart_hint() {
-  mkdir -p "${DEPLOYPATH}/tmp"
-  touch "${DEPLOYPATH}/tmp/restart.txt" 2>/dev/null || true
+restart_passenger_app() {
+  TMD_RESTART_LOG_FILE="$LOG_FILE" bash "$(dirname "$0")/tmd-passenger-restart.sh" || true
 }
 
 if ! sync_source_to_staging; then
@@ -331,9 +330,8 @@ fi
 
 echo "$RELEASE_ID" >"${RELEASES_DIR}/current-release"
 prune_old_releases
-passenger_restart_hint
+restart_passenger_app
 
 log "BUILD_OK — release ${RELEASE_ID} is live on disk."
-log "Restart Setup Node.js App in cPanel (or: touch ~/coding/fst/tmp/restart.txt)."
 log "Deploy log: ${LOG_FILE}"
 log "Rollback: bash scripts/tmd-rollback.sh"

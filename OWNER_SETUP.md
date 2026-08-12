@@ -44,8 +44,8 @@ Full step-by-step (clone → `.env` → build → Node.js app → ongoing Pull/D
 - [ ] **Create `.env` on server** — `DATABASE_URL` with `@127.0.0.1:5432`, `NEXT_PUBLIC_SITE_URL`, `ADMIN_PASSWORD` (never commit)
 - [ ] **First build on server** — `npm install`, `prisma generate`, `db:push`, `db:seed`, `build`
 - [ ] **Create subdomain** — e.g. `app.faststarttalking.com` (new docroot, not `public_html`)
-- [ ] **Setup Node.js App** in cPanel — application root `coding/fst`, restart after each deploy
-- [ ] **Deploy loop** — push to GitHub → auto-deploy via GitHub Actions SSH (recommended) → restart Node app
+- [ ] **Setup Node.js App** in cPanel — application root `coding/fst`
+- [ ] **Deploy loop** — push to GitHub → auto-deploy via GitHub Actions SSH (recommended); deploy script auto-restarts Passenger
 - [ ] **GitHub Actions SSH deploy** (recommended when cPanel webhook unavailable) — see [docs/TMD_DEPLOY.md § GitHub Actions SSH deploy](docs/TMD_DEPLOY.md#github-actions-ssh-deploy-recommended)
   - [ ] Generate deploy key: `ssh-keygen -t ed25519 -f github_actions_fst -N ""`
   - [ ] cPanel → **SSH Access** → **Manage SSH Keys** → import public key → **Authorize** for user `faststar`
@@ -55,7 +55,7 @@ Full step-by-step (clone → `.env` → build → Node.js app → ongoing Pull/D
     - `TMD_SSH_USER` — `faststar`
     - `TMD_SSH_PORT` — optional, default `22`
   - [ ] **Remove** `CPANEL_DEPLOY_WEBHOOK_URL` if it is a cPanel login URL (contains `cpsess`)
-  - [ ] After each deploy: cPanel → **Setup Node.js App** → **Restart** (Passenger limitation)
+  - [ ] After deploy: confirm `Passenger auto-restart signal sent` in `~/coding/fst-releases/deploy-*.log` (manual cPanel Restart only if stale)
 - [ ] **Auto-deploy webhook (fallback)** — only if SSH deploy is not used; cPanel Git → Manage → Pull or Deploy → copy **Webhook URL** → GitHub secret `CPANEL_DEPLOY_WEBHOOK_URL` — see [docs/TMD_DEPLOY.md § Automatic deploy](docs/TMD_DEPLOY.md#automatic-deploy-on-github-push-cpanel-webhook-fallback)
 
 SSH and PostgreSQL dev access: [docs/TMD_SSH.md](docs/TMD_SSH.md).
@@ -177,6 +177,7 @@ Skip unless contact form should email Teacher Joe on submission.
 ## Notes
 
 <!-- Owner: add project-specific reminders here. Do not paste secrets. -->
+<!-- Deploy: tmd-deploy.sh auto-restarts Passenger via tmp/restart.txt after BUILD_OK. -->
 
 - Brand color: sky blue ~#75BEE2 (hue 200) — tokens in `src/app/globals.css` and `src/lib/brand.ts`
 - Contact email on site: teacherjoejinan@gmail.com

@@ -28,7 +28,6 @@ rollback_dir() {
 rollback_dir "node_modules"
 rollback_dir ".next"
 
-mkdir -p "${DEPLOYPATH}/tmp"
-touch "${DEPLOYPATH}/tmp/restart.txt" 2>/dev/null || true
+DEPLOYPATH="$DEPLOYPATH" bash "$(dirname "$0")/tmd-passenger-restart.sh"
 
-echo "Rollback complete — restart Setup Node.js App in cPanel."
+echo "Rollback complete — Passenger restart signal sent (verify app if needed)."

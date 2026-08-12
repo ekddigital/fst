@@ -8,7 +8,7 @@
 #      (NOT a cPanel login URL with cpsess).
 #
 # Server-side: repo at ~/coding/fst, .env on server, SSH deploy key in cPanel Git.
-# After deploy: restart Node.js app in cPanel (Passenger limitation).
+# After deploy: scripts/tmd-passenger-restart.sh auto-restarts Passenger (tmp/restart.txt + cloudlinux-selector).
 # Full guide: docs/TMD_DEPLOY.md
 
 name: Deploy

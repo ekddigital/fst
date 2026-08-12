@@ -362,9 +362,7 @@ On your Mac: develop → `npx tsc --noEmit && npm run build` → `git push origi
 
 **Recommended:** GitHub Actions SSH deploy runs automatically after CI passes — no manual git clean or cPanel **Deploy HEAD Commit** needed. See [GitHub Actions SSH deploy](#github-actions-ssh-deploy-recommended).
 
-After each deploy: cPanel → **Setup Node.js App** → **Restart**.
-
-**Manual fallback:** cPanel → **Git Version Control** → `fst` → **Update from Remote** → **Deploy HEAD Commit** → restart Node app (requires clean working tree).
+After each deploy: `scripts/tmd-deploy.sh` runs `scripts/tmd-passenger-restart.sh` (touches `tmp/restart.txt`, then `cloudlinux-selector restart` if available). Manual cPanel **Restart** is only needed if the deploy log shows restart warnings or the site serves stale content.
 
 **Zero-downtime:** `scripts/tmd-deploy.sh` builds in `~/coding/fst-releases/<timestamp>/` and only swaps `.next` + `node_modules` into the live app after `BUILD_OK`. The previous release keeps serving during `npm ci` and `next build` (no 503 from in-place install). See [Zero-downtime deploy](#zero-downtime-deploy-blue-green).
 
@@ -590,10 +588,9 @@ FST on shared cPanel does **not** have Launchpad-style remote env API; SSH file 
 
 1. cPanel → **Git Version Control** → select `fst`
 2. **Pull or Deploy** → **Update from Remote** (pull latest `main`)
-3. **Deploy HEAD Commit** — runs `.cpanel.yml` → `scripts/tmd-deploy.sh` (see below)
-4. cPanel → **Setup Node.js App** → **Restart** the FST application
+3. **Deploy HEAD Commit** — runs `.cpanel.yml` → `scripts/tmd-deploy.sh` (auto-restarts Passenger on success)
 
-**Automatic deploy on push:** configure [GitHub Actions SSH deploy](#github-actions-ssh-deploy-recommended) (recommended) or the [cPanel webhook fallback](#automatic-deploy-on-github-push-cpanel-webhook-fallback). You still **Restart** the Node.js app after each deploy (cPanel does not restart Passenger from `.cpanel.yml`).
+**Automatic deploy on push:** configure [GitHub Actions SSH deploy](#github-actions-ssh-deploy-recommended) (recommended) or the [cPanel webhook fallback](#automatic-deploy-on-github-push-cpanel-webhook-fallback). Deploy script auto-restarts Passenger after `BUILD_OK`.
 
 **Schema changes only:** after editing `prisma/schema.prisma`, SSH in and run `npm run db:push` before or after deploy. `.cpanel.yml` does **not** run `db:push` or `db:seed` on every deploy (by design).
 
@@ -612,7 +609,7 @@ flowchart LR
   TMD --> Staging[~/coding/fst-releases/TIMESTAMP]
   Staging -->|npm ci + build| Build[BUILD_OK]
   Build -->|atomic swap| Live
-  Live --> Node[cPanel Node.js App restart]
+  Live --> Node[Passenger auto-restart]
   Node --> Sub[app.faststarttalking.com]
   Live --> PG[(faststar_fst)]
 ```
@@ -648,7 +645,7 @@ cPanel **Setup Node.js App** must keep **Application root** = `coding/fst` (fixe
 6. `npm run db:generate`, optional seed, `npm run build` under `env -i` (vars from `.env`)
 7. On `BUILD_OK`: `mv` staging `.next` and `node_modules` into live; move previous live copies to `backup-*`
 8. Prune old timestamped releases (keep `TMD_RELEASES_KEEP`, default **3**)
-9. `touch tmp/restart.txt` (Passenger hint) — still **Restart** in cPanel
+9. `scripts/tmd-passenger-restart.sh` — `tmp/restart.txt` + optional `cloudlinux-selector restart`
 
 ### Rollback
 
@@ -657,7 +654,7 @@ After a bad deploy:
 ```bash
 cd ~/coding/fst
 bash scripts/tmd-rollback.sh
-# cPanel → Setup Node.js App → Restart
+# auto-restarts Passenger via tmd-passenger-restart.sh
 ```
 
 Restores `fst-releases/backup-.next` and `backup-node_modules` from the deploy **before** the last swap.
@@ -679,7 +676,7 @@ If an **old** deploy ran `npm ci` in `~/coding/fst` and left the site on 503:
 cd ~/coding/fst
 git pull origin main
 TMD_SKIP_GIT_PULL=1 TMD_SKIP_SEED=1 bash scripts/tmd-deploy.sh
-# wait for BUILD_OK, then cPanel → Setup Node.js App → Restart
+# wait for BUILD_OK; deploy script auto-restarts Passenger
 ```
 
 Do **not** run `npm ci` in the live app root. The new script builds in staging and swaps on success.
@@ -739,11 +736,11 @@ git push origin main
 
 GitHub → **Actions** → **Deploy** workflow → confirm SSH deploy step succeeds.
 
-Check server log: `~/coding/fst-releases/deploy-*.log` for `BUILD_OK`.
+Check server log: `~/coding/fst-releases/deploy-*.log` for `BUILD_OK` and `Passenger auto-restart signal sent`.
 
-**6. Restart Node.js app**
+**6. Verify app**
 
-cPanel → **Setup Node.js App** → **Restart** — required after every deploy (Passenger does not auto-restart from the deploy script).
+Confirm `app.faststarttalking.com` loads the new release. Manual cPanel **Restart** only if the deploy log shows restart warnings.
 
 ### What the SSH deploy runs
 
@@ -764,7 +761,7 @@ TMD_SKIP_GIT_PULL=1 TMD_SKIP_SEED=1 bash scripts/tmd-deploy.sh
 
 ### Limitations
 
-Same as [cPanel webhook deploy](#limitations-on-tmd-shared-hosting): no automatic Passenger restart, LVE limits, `.env` not in git, no `db:push` on deploy.
+Same as [cPanel webhook deploy](#limitations-on-tmd-shared-hosting): Passenger restart is best-effort (see deploy log), LVE limits, `.env` not in git, no `db:push` on deploy.
 
 ---
 
@@ -824,7 +821,7 @@ Do not use both Actions secret **and** a GitHub Webhook with the same cPanel URL
 
 2. GitHub → **Settings** → **Webhooks** → your webhook → **Recent Deliveries** — confirm **200** response
 3. cPanel → **Git Version Control** → **Manage** → **Last Deployment Information** (or deploy log: `~/.cpanel/logs/vc_*_git_deploy.log`)
-4. cPanel → **Setup Node.js App** → **Restart** the FST app (required after every deploy)
+4. Confirm deploy log shows `Passenger auto-restart signal sent` (manual cPanel **Restart** only if stale)
 
 ### Optional — cPanel “Pull on push” toggle
 
@@ -834,7 +831,7 @@ Some cPanel versions expose **Pull on push** or **Automatic pull** on the reposi
 
 | Limitation | Mitigation |
 |------------|------------|
-| **No Node app auto-restart** | `.cpanel.yml` cannot restart Passenger. **Restart** Setup Node.js App after each deploy (manual or scheduled). |
+| **Passenger restart best-effort** | `scripts/tmd-passenger-restart.sh` touches `tmp/restart.txt` and runs `cloudlinux-selector restart` when available. Check deploy log; manual cPanel **Restart** if stale. |
 | **LVE process limits** | `npm ci` + `next build` is heavy. **Do not** trigger multiple deploys in parallel. Close extra SSH sessions. Builds use `RAYON_NUM_THREADS=1` and `NEXT_BUILD_CPUS=1`. If build fails with `Resource temporarily unavailable`, wait 15–30 min and retry `bash scripts/tmd-deploy.sh` from cPanel Terminal only. |
 | **`.env` not in git** | Webhook deploy does not create or update secrets. Maintain `~/coding/fst/.env` on the server separately. |
 | **No `db:push` / `db:seed` on deploy** | Schema migrations: SSH and run `npm run db:push`. Seed only when needed: `./scripts/tmd-deploy.sh` (without `TMD_SKIP_SEED=1`). |
@@ -884,7 +881,7 @@ bash scripts/tmd-deploy.sh
 - `.env` must exist on the server with a working `DATABASE_URL` (build queries the DB)
 - Node.js version on server must be **22** (Next.js 16 requirement)
 
-**After every Deploy HEAD Commit:** restart the Node.js app in cPanel.
+**After every Deploy HEAD Commit:** deploy script auto-restarts Passenger (verify in `~/coding/fst-releases/deploy-*.log`).
 
 For static-site deploys, cPanel docs use `cp` to copy files into `public_html`. FST is a **dynamic Next.js app** — the repo path **is** the app root; build in place instead of copying.
 
@@ -1057,7 +1054,7 @@ cd ~/coding/fst && nohup bash scripts/tmd-deploy.sh > ~/tmd-deploy.log 2>&1 &
 tail -f ~/tmd-deploy.log
 ```
 
-After `BUILD_OK`, cPanel → **Setup Node.js App** → **Restart**.
+After `BUILD_OK`, check deploy log for `Passenger auto-restart signal sent`.
 
 `server.js` is **tracked on `main`** (cPanel startup file). Only remove a **local untracked** copy before pull — see [`git pull` blocked by untracked `server.js`](#git-pull-blocked-by-untracked-serverjs).
 
@@ -1107,7 +1104,7 @@ See [Option A — SSH deploy key](#option-a--ssh-deploy-key-recommended) and [te
 - [ ] `npm install && npx prisma generate && npm run db:push && npm run db:seed && npm run build`
 - [ ] Node.js App env vars set in cPanel, app **Start** / **Restart**
 - [ ] Smoke test: home, programs, articles, admin login, forms
-- [ ] Push to `main` → cPanel Pull → Deploy HEAD Commit → restart Node app verified
+- [ ] Push to `main` → deploy via GitHub Actions SSH → verify `Passenger auto-restart signal sent` in deploy log
 
 ---
 
